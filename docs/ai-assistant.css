@@ -1,0 +1,90 @@
+/* One lightweight AI settings modal, no frontend framework or subscription auth. */
+.ai-topbar-btn { border: 1px solid #e2e7ee; background: #fff; color: #536273; border-radius: 9px; display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; padding: 9px 12px; cursor: pointer; white-space: nowrap; }
+.ai-topbar-btn:hover { background: #f5f7fd; color: #355ac9; border-color: #cfdaef; }
+.ai-topbar-btn svg { width: 15px; height: 15px; }
+.ai-dialog { border: 1px solid #e3e9f2; border-radius: 16px; padding: 0; color: #263244; background: #fff; width: min(625px,calc(100vw - 26px)); max-height: min(90dvh,890px); box-shadow: 0 32px 100px rgba(27,40,66,.18); overflow: hidden; margin: auto; }
+.ai-dialog::backdrop { background: rgba(24,38,58,.38); backdrop-filter: blur(3px); }
+.ai-dialog-inner { max-height: min(90dvh,890px); overflow-y: auto; }
+.ai-dialog-header { display: flex; align-items: flex-start; gap: 12px; justify-content: space-between; padding: 23px 25px 15px; }
+.ai-dialog-header h2 { font-size: 19px; line-height: 1.35; margin: 0; color: #1d2939; }
+.ai-dialog-header p { color: #919bab; font-size: 12px; line-height: 1.65; margin-top: 6px; }
+.ai-close-btn { flex-shrink: 0; display: grid; place-items: center; width: 29px; height: 29px; border: 0; border-radius: 8px; background: #f4f6fa; color: #8995a4; font-size: 19px; cursor: pointer; }
+.ai-close-btn:hover { color: #52617b; background: #e7edf5; }
+.ai-privacy { margin: 0 25px 16px; border: 1px solid #e3ecfb; background: #f6f9ff; border-radius: 10px; padding: 13px 15px; font-size: 12px; color: #61718b; line-height: 1.9; }
+.ai-privacy strong { color: #344966; }
+.ai-http-warning { margin-top: 9px; border-top: 1px solid #e1e6f1; padding-top: 8px; color: #ab7540; }
+.ai-config-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 15px; padding: 0 25px 19px; }
+.ai-field { min-width: 0; }
+.ai-field.ai-span { grid-column: 1 / -1; }
+.ai-field > label { color: #566478; font-weight: 650; display: block; font-size: 12px; margin-bottom: 7px; }
+.ai-field input, .ai-field select, .ai-field textarea, #aiRepairSource { display: block; width: 100%; border: 1px solid #dfe5ee; background: #fff; color: #3d4b5d; border-radius: 8px; padding: 10px 11px; min-height: 40px; font-size: 12px; outline: 0; }
+.ai-field input:focus, .ai-field select:focus, .ai-field textarea:focus, #aiRepairSource:focus { border-color: #819bec; box-shadow: 0 0 0 3px rgba(77,109,216,.08); }
+.ai-field textarea { min-height: 67px; font: 12px/1.6 ui-monospace, Menlo, monospace; }
+.ai-field .ai-field-help { margin-top: 6px; color: #9aa5b3; font-size: 10px; line-height: 1.6; }
+.ai-key-row { display: flex; gap: 7px; }
+.ai-key-row input { flex: 1; min-width: 0; }
+.ai-key-row button { border: 1px solid #dfe5ee; background: #f8fafc; color: #637089; padding: 0 13px; border-radius: 8px; font-size: 12px; cursor: pointer; }
+.ai-settings-actions { border-top: 1px solid #e9edf3; padding: 17px 25px 20px; display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.ai-action { background: #4564d8; color: #fff; border: 1px solid transparent; border-radius: 8px; padding: 10px 14px; font-size: 12px; font-weight: 650; cursor: pointer; }
+.ai-action:hover:not(:disabled) { background: #3452bb; }
+.ai-action.secondary { background: #f3f6ff; border-color: #dfe8ff; color: #4665bc; }
+.ai-action.ghost { background: #fff; border-color: #e4e8ee; color: #7a8797; }
+.ai-action:disabled { cursor: not-allowed; opacity: .48; }
+.ai-settings-status { font-size: 12px; padding: 0 25px 22px; min-height: 17px; line-height: 1.75; color: #708299; }
+.ai-settings-status.error, .ai-repair-status.error { color: #c55350; }
+.ai-settings-status.success, .ai-repair-status.success { color: #278863; }
+.ai-repair-intro { color: #8c98a7; font-size: 12px; line-height: 1.8; margin: 0 0 15px; }
+.ai-repair-grid { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 9px; align-items: end; margin-bottom: 13px; }
+.ai-repair-grid label { font-size: 12px; color: #647185; font-weight: 650; display: block; margin-bottom: 8px; }
+.ai-repair-problem { min-height: 82px; max-height: 180px; }
+.ai-repair-status { font-size: 12px; color: #7e8a99; margin-top: 12px; line-height: 1.75; }
+.ai-repair-result { margin-top: 17px; border-top: 1px solid #e7edf5; padding-top: 17px; }
+.ai-repair-result h3 { font-size: 14px; font-weight: 700; color: #35445a; margin: 0 0 7px; }
+.ai-repair-result p { font-size: 12px; color: #8190a1; line-height: 1.85; }
+.ai-patch { border: 1px solid #e9edf3; background: #fbfcff; border-radius: 10px; padding: 12px 13px; margin-top: 11px; }
+.ai-patch strong { color: #3e5a9b; font-size: 12px; font-family: ui-monospace,monospace; }
+.ai-patch .ai-patch-reason { font-size: 11px; color: #91a0ad; margin-top: 5px; }
+.ai-patch-label { display: block; margin-top: 10px; color: #9aa6b4; font-size: 10px; }
+.ai-patch pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; font-size: 11px; line-height: 1.65; padding: 9px 11px; border-radius: 7px; margin-top: 5px; background: #f2f5fa; color: #657183; }
+.ai-patch pre.new { background: #f2f9f6; color: #307655; }
+.ai-repair-notice { background: #fafbfd; border: 1px solid #edf0f4; color: #8995a3; padding: 11px 12px; border-radius: 9px; font-size: 11px; line-height: 1.85; margin-top: 14px; }
+.ai-repair-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 13px; }
+@media (max-width: 600px) {
+ .ai-config-grid { grid-template-columns: 1fr; padding: 0 17px 15px; gap: 13px; }
+ .ai-dialog-header { padding: 17px 17px 13px; }
+ .ai-privacy { margin: 0 17px 16px; }
+ .ai-settings-actions { padding: 15px 17px; }
+ .ai-settings-status { padding: 0 17px 18px; }
+ .ai-repair-grid { grid-template-columns: 1fr; }
+ .ai-topbar-btn { padding: 8px 10px; }
+}
+
+/* Honest step-by-step real website evidence, kept within the existing card. */
+.ai-site-check-input { margin-top: 17px; }
+.ai-site-check-input .ai-field input { min-height: 40px; }
+.ai-site-check-input button { align-self: end; margin-bottom: 2px; }
+.ai-web-evidence { margin-top: 18px; padding: 17px; border: 1px solid #e2e8f0; background: #fbfcfe; border-radius: 12px; }
+.ai-web-evidence h3 { color: #364354; font-size: 14px; font-weight: 690; margin: 0 0 7px; }
+.ai-web-evidence p { font-size: 11px; color: #7a8797; margin: 0 0 15px; line-height: 1.7; }
+.ai-web-steps { display: flex; flex-direction: column; gap: 8px; }
+.ai-web-step { padding: 12px 13px; background: #fff; border: 1px solid #edf0f5; border-radius: 9px; }
+.ai-web-step-top { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+.ai-web-step-title { font-size: 12px; font-weight: 650; color: #4a5669; }
+.ai-web-step-result { font-size: 11px; color: #768395; font-weight: 610; }
+.ai-web-step[data-status=ok] .ai-web-step-result { color: #21926a; }
+.ai-web-step[data-status=timeout] .ai-web-step-result,
+.ai-web-step[data-status=network-error] .ai-web-step-result,
+.ai-web-step[data-status=blocked] .ai-web-step-result { color: #c06b35; }
+.ai-web-step[data-status=no-results] .ai-web-step-result { color: #c26c53; }
+.ai-web-step-text { font-size: 11px; color: #8c97a6; line-height: 1.75; margin-top: 6px; overflow-wrap: anywhere; }
+.ai-web-evidence .ai-repair-notice { margin-top: 11px; }
+@media (max-width:600px) { .ai-web-evidence { padding: 12px; } }
+
+.ai-example-row { margin: 3px 0 14px; gap: 8px; }
+.ai-example-note { font-size: 11px; line-height: 1.7; color: #9aa5b3; }
+.ai-web-details { margin-top: 9px; border-top: 1px dashed #e3e8f0; padding-top: 8px; }
+.ai-web-details summary { cursor: pointer; font-size: 11px; color: #556da6; padding: 3px 0; }
+.ai-web-details pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f4f7fd; border: 1px solid #e6ebf4; padding: 11px 12px; border-radius: 7px; max-height: 420px; overflow: auto; color: #576578; font-size: 11px; line-height: 1.75; margin: 7px 0 0; }
+.ai-confirmed-samples { display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0 15px; font-size: 11px; }
+.ai-confirmed-samples a { color: #4564c7; text-decoration: none; }
+.ai-confirmed-samples a:hover { text-decoration: underline; }

@@ -1,0 +1,56 @@
+[
+  {
+    "bookSourceName": "速读谷",
+    "bookSourceType": 0,
+    "bookSourceUrl": "https://suduguu.com/",
+    "bookUrlPattern": "https://suduguu\\.com/\\d+/",
+    "customOrder": 11,
+    "enabled": true,
+    "enabledCookieJar": false,
+    "enabledExplore": true,
+    "header": "{\"User-Agent\":\"Mozilla/5.0 (Linux; Android 9) Mobile Safari/537.36\"}",
+    "jsLib": "function getCover(href) { return href && href.startsWith('http') ? href : 'https://suduguu.com' + (href||''); }",
+    "exploreUrl": "@js:\nvar inputData = `°·*.☆ 全部榜单 ☆.*·°\n最近更新::/zuixin/{{page}}.html\n热门小说::/paihang/{{page}}.html\n连载小说::/lianzai/{{page}}.html\n完结小说::/wanjie/{{page}}.html\n玄幻小说::/xuanhuan/{{page}}.html\n仙侠小说::/xianxia/{{page}}.html\n都市小说::/dushi/{{page}}.html\n历史小说::/lishi/{{page}}.html\n科幻小说::/kehuan/{{page}}.html\n轻小说::/qing/{{page}}.html\n悬疑小说::/xuanyi/{{page}}.html\n游戏小说::/youxi/{{page}}.html\n奇幻小说::/qihuan/{{page}}.html\n诸天无限::/zhutianwuxian/{{page}}.html\n军事小说::/junshi/{{page}}.html\n重生小说::/chongsheng/{{page}}.html\n武侠小说::/wuxia/{{page}}.html\n体育小说::/tiyu/{{page}}.html\n言情小说::/yanqing/{{page}}.html`;\nvar categories = [];\nvar lines = inputData.split('\\n').filter(l => l.trim());\nvar items = [];\nfor(var i=0;i<lines.length;i++){ var parts=lines[i].split('::');var title=parts[0]||'';var url=(parts[1]||'').trim();if(!url){categories.push({title:title,url:'',style:{layout_flexGrow:1,layout_flexBasisPercent:1}});}else{items.push({title:title,url:url,style:{layout_flexGrow:1,layout_flexBasisPercent:0.25}});}}\nfor(var j=0;j<items.length;j++)categories.push(items[j]);\nJSON.stringify(categories);",
+    "ruleExplore": {
+      "bookList": ".item",
+      "bookUrl": "a@href",
+      "coverUrl": "img@src@js:getCover(result)",
+      "name": "h3@a@text",
+      "author": "p@a@text##作者[：:]",
+      "kind": "p@span@text",
+      "lastChapter": "ul@li@a@text",
+      "intro": ".desc@text"
+    },
+    "searchUrl": "/i/sor.aspx?key={{key}}",
+    "ruleSearch": {
+      "bookList": ".item",
+      "bookUrl": "a@href",
+      "coverUrl": "img@src@js:getCover(result)",
+      "name": "h3@a@text",
+      "author": "p@a@text##作者[：:]",
+      "kind": "p@span@text",
+      "lastChapter": "ul@li@a@text"
+    },
+    "ruleBookInfo": {
+      "name": "h1@a@text",
+      "author": ".itemtxt@p.1@text##作者[：:]",
+      "coverUrl": ".item@img@src@js:getCover(result)",
+      "intro": ".des@p@text##简介[：:]",
+      "kind": ".itemtxt@p.0@text",
+      "wordCount": "h1@i@text",
+      "lastChapter": ".itemtxt@ul@li.0@a@text"
+    },
+    "ruleToc": {
+      "chapterList": "#list@ul@li@a",
+      "chapterName": "text##[\\(\\{（｛【].*[首为求更谢乐发推票章盟第补合感订加字KkWw\\/].*[\\)\\}）｝】]",
+      "chapterUrl": "href",
+      "nextTocUrl": "text.下一页@href"
+    },
+    "ruleContent": {
+      "content": ".con@html",
+      "nextContentUrl": "text.下一页@href",
+      "replaceRegex": "@js:\nvar r = result; r = r.replace(/\\(本章完\\)/g,'').replace(/速读谷/g,'').replace(/suduguu\\.com/g,'').replace(/最新最快无错/g,'').replace(/请收藏本站/g,'');r;"
+    },
+    "lastUpdateTime": "1791506505721"
+  }
+]

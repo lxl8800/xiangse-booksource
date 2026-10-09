@@ -1,0 +1,380 @@
+{
+  "速读谷": {
+    "sourceName": "速读谷",
+    "sourceUrl": "https://www.suduguu.com",
+    "sourceType": "text",
+    "weight": "100",
+    "enable": 1,
+    "miniAppVersion": "2.53.2",
+    "lastModifyTime": "1791535111.237",
+    "shudanList": {},
+    "shudanDetail": {
+      "actionID": "shudanDetail",
+      "parserID": "DOM"
+    },
+    "shupingList": {
+      "actionID": "shupingList",
+      "parserID": "DOM"
+    },
+    "shupingHome": {
+      "actionID": "shupingHome",
+      "parserID": "DOM"
+    },
+    "searchShudan": {
+      "actionID": "searchShudan",
+      "parserID": "DOM"
+    },
+    "relatedWord": {
+      "actionID": "relatedWord",
+      "parserID": "DOM"
+    },
+    "searchBook": {
+      "validConfig": "",
+      "actionID": "searchBook",
+      "host": "https://www.suduguu.com",
+      "parserID": "DOM",
+      "responseFormatType": "html",
+      "requestInfo": "https://www.suduguu.com/i/sor.aspx?key=%@keyWord",
+      "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+      "bookName": ".//h3/a/text()",
+      "detailUrl": ".//h3/a/@href",
+      "cover": ".//img/@src",
+      "cat": "//p//span//text()",
+      "author": "//p//a//text()||@js:\nreturn result.replace(/作者[：:]/g,\"\");",
+      "lastChapterTitle": "//ul//li//a//text()"
+    },
+    "bookDetail": {
+      "validConfig": "",
+      "actionID": "bookDetail",
+      "host": "https://www.suduguu.com",
+      "parserID": "DOM",
+      "responseFormatType": "html",
+      "requestInfo": "%@result",
+      "bookName": "//h1//a//text()",
+      "author": "(//*[contains(concat(' ', normalize-space(@class), ' '), ' itemtxt ')]//p)[2]//text()||@js:\nreturn result.replace(/作者[：:]/g,\"\");",
+      "cover": "//div[contains(concat(' ',normalize-space(@class),' '),' item ')]//img/@src",
+      "desc": "//*[contains(concat(' ', normalize-space(@class), ' '), ' des ')]//p//text()||@js:\nreturn result.replace(/简介[：:]/g,\"\");",
+      "cat": "(//*[contains(concat(' ', normalize-space(@class), ' '), ' itemtxt ')]//p)[1]//text()",
+      "wordCount": "//h1//i//text()",
+      "lastChapterTitle": "(//*[contains(concat(' ', normalize-space(@class), ' '), ' itemtxt ')]//ul//li)[1]//a//text()"
+    },
+    "chapterList": {
+      "validConfig": "",
+      "actionID": "chapterList",
+      "host": "https://www.suduguu.com",
+      "parserID": "DOM",
+      "responseFormatType": "html",
+      "requestInfo": "%@result",
+      "list": "//*[contains(@id,\"list\")]//ul//li//a",
+      "title": "//text()||@js:\nreturn result.replace(/[\\(\\{（｛【].*[首为求更谢乐发推票章盟第补合感订加字KkWw\\\\/].*[\\)\\}）｝】]/g,\"\");",
+      "url": "//@href||@js:\nvar u=String(result==null?'':result).trim();\nif(!u)return '';\nif(/^(https?:|data:|blob:)/i.test(u))return u;\nvar b=String((typeof params!=='undefined'&&params.responseUrl)||\"https://suduguu.com\").replace(/[?#].*$/,'');\nvar m=b.match(/^(https?):\\/\\/[^/]+/i);if(!m)return u;\nvar origin=m[0];\nif(u.slice(0,2)==='//')return m[1]+':'+u;\nif(u.charAt(0)==='?')return b+u;\nif(u.charAt(0)==='#')return b+u;\nvar path=u.charAt(0)==='/'?u:b.slice(origin.length).replace(/\\/[^/]*$/,'/')+u;\nvar parts=path.split('/'),stack=[];\nfor(var i=0;i<parts.length;i++){\nif(parts[i]==='..'){if(stack.length>1)stack.pop();}\nelse if(parts[i]==='.'||parts[i]===''){if(i===0)stack.push('');}\nelse stack.push(parts[i]);\n}\nreturn origin+stack.join('/');",
+      "nextPageUrl": "//*[contains(text(),\"下一页\")]/@href||@js:\nvar u=String(result==null?'':result).trim();\nif(!u)return '';\nif(/^(https?:|data:|blob:)/i.test(u))return u;\nvar b=String((typeof params!=='undefined'&&params.responseUrl)||\"https://suduguu.com\").replace(/[?#].*$/,'');\nvar m=b.match(/^(https?):\\/\\/[^/]+/i);if(!m)return u;\nvar origin=m[0];\nif(u.slice(0,2)==='//')return m[1]+':'+u;\nif(u.charAt(0)==='?')return b+u;\nif(u.charAt(0)==='#')return b+u;\nvar path=u.charAt(0)==='/'?u:b.slice(origin.length).replace(/\\/[^/]*$/,'/')+u;\nvar parts=path.split('/'),stack=[];\nfor(var i=0;i<parts.length;i++){\nif(parts[i]==='..'){if(stack.length>1)stack.pop();}\nelse if(parts[i]==='.'||parts[i]===''){if(i===0)stack.push('');}\nelse stack.push(parts[i]);\n}\nreturn origin+stack.join('/');",
+      "moreKeys": {
+        "maxPage": 20
+      }
+    },
+    "chapterContent": {
+      "validConfig": "",
+      "actionID": "chapterContent",
+      "host": "https://www.suduguu.com",
+      "parserID": "DOM",
+      "responseFormatType": "html",
+      "requestInfo": "%@result",
+      "content": "//*[contains(concat(' ', normalize-space(@class), ' '), ' con ')]",
+      "nextPageUrl": "//*[contains(text(),\"下一页\")]/@href||@js:\nvar u=String(result==null?'':result).trim();\nif(!u)return '';\nif(/^(https?:|data:|blob:)/i.test(u))return u;\nvar b=String((typeof params!=='undefined'&&params.responseUrl)||\"https://suduguu.com\").replace(/[?#].*$/,'');\nvar m=b.match(/^(https?):\\/\\/[^/]+/i);if(!m)return u;\nvar origin=m[0];\nif(u.slice(0,2)==='//')return m[1]+':'+u;\nif(u.charAt(0)==='?')return b+u;\nif(u.charAt(0)==='#')return b+u;\nvar path=u.charAt(0)==='/'?u:b.slice(origin.length).replace(/\\/[^/]*$/,'/')+u;\nvar parts=path.split('/'),stack=[];\nfor(var i=0;i<parts.length;i++){\nif(parts[i]==='..'){if(stack.length>1)stack.pop();}\nelse if(parts[i]==='.'||parts[i]===''){if(i===0)stack.push('');}\nelse stack.push(parts[i]);\n}\nreturn origin+stack.join('/');",
+      "moreKeys": {
+        "maxPage": 6
+      }
+    },
+    "bookWorld": {
+      "最近更新": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/zuixin/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "热门小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/paihang/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "连载小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/lianzai/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "完结小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/wanjie/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "玄幻小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/xuanhuan/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "仙侠小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/xianxia/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "都市小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/dushi/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "历史小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/lishi/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "科幻小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/kehuan/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "轻小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/qing/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "悬疑小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/xuanyi/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "游戏小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/youxi/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "奇幻小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/qihuan/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "诸天无限": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/zhutianwuxian/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "军事小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/junshi/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "重生小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/chongsheng/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "武侠小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/wuxia/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "体育小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/tiyu/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      },
+      "言情小说": {
+        "validConfig": "",
+        "actionID": "bookWorld",
+        "host": "https://www.suduguu.com",
+        "parserID": "DOM",
+        "responseFormatType": "html",
+        "requestInfo": "@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:\"https://www.suduguu.com/yanqing/\"+(p===1?\"\":p+\".html\")};",
+        "list": "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]",
+        "bookName": ".//h3/a/text()",
+        "detailUrl": ".//h3/a/@href",
+        "cover": ".//img/@src",
+        "moreKeys": {
+          "maxPage": 20
+        }
+      }
+    },
+    "httpHeaders": {
+      "User-Agent": "Mozilla/5.0 (Linux; Android 9) Mobile Safari/537.36"
+    }
+  }
+}

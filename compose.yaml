@@ -1,0 +1,22 @@
+services:
+  xiangse-booksource:
+    build: .
+    image: xiangse-booksource:local
+    container_name: xiangse-booksource-web
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:4397:4397"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4397/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

@@ -23,15 +23,22 @@ function mapContentOp(op, ctx) {
   var xpath;
   switch (op) {
     case "text":
-      // 后代文本：标题/简介常含 <em>/<span> 内嵌标签，直接子文本会漏字
-      xpath = "//text()";
+      // Chapter content expects DOM element(s) in XSGG; not a fragmented XPath text-node set.
+      // For other fields, retain normal extraction to avoid breaking titles/descriptions.
+      if (field === "content" && stype === 0) {
+        xpath = "";
+      } else {
+        xpath = "//text()";
+      }
       break;
     case "ownText":
       // 仅元素自身直接文本（排除后代），语义不同保持 /text()
       xpath = "/text()";
       break;
     case "textNodes":
-      xpath = "//text()";
+      // XSGG's chapterContent normally points to the containing element (see shuyuan-lab demo).
+      // Keep the element, preserving interleaved <br> and text instead of 50+ text nodes.
+      xpath = (field === "content" && stype === 0) ? "" : "//text()";
       break;
     case "html":
     case "all":
@@ -42,8 +49,9 @@ function mapContentOp(op, ctx) {
         xpath = "//img/@src";
         notes.push("漫画/视频源：已默认取容器内 //img/@src；懒加载站点请人工改为 @data-src 或实际图片属性");
       } else {
-        // 小说等文本源：统一后代文本
-        xpath = "//text()";
+        // For text novels, let XSGG parse chapterContent from the selected DOM container.
+        // Other fields and non-text source types continue to extract text explicitly.
+        xpath = (field === "content" && stype === 0) ? "" : "//text()";
         if (stype === 1 || stype === 3) {
           notes.push("音频/文件源内容按文本处理，请人工确认播放地址规则");
         }
@@ -151,9 +159,13 @@ function arraySpecPredicates(spec) {
   else if (spec.type === "list") exprs = spec.indices.map(indexToPosExpr);
   else exprs = [rangeExpr(spec.start, spec.end)];
   if (spec.exclude) {
-    preds.push("not(" + exprs.join(" or ") + ")");
+    // `not(1)` in XPath is always false; numeric indices must be compared with position().
+    var conds = exprs.map(function(e) {
+      return /^(\d+|last\(\)(?:-\d+)?)$/.test(e) ? "position()=" + e : e;
+    });
+    preds.push("not(" + conds.join(" or ") + ")");
   } else {
-    preds.push(exprs.join(" or "));
+    preds.push(exprs.length > 1 ? exprs.map(function(e) { return "position()=" + e; }).join(" or ") : exprs[0]);
   }
   if (spec.type === "range" && (spec.start < 0 || spec.end < 0)) {
     notes.push("负数区间索引已尽力转换，请人工验证");
@@ -186,9 +198,18 @@ function findCloseParen(str, openIdx) {
 // 返回 { xpath, notes } 或 { error }
 function parseSegment(seg, ctx) {
   var notes = [];
+  if(/\s/.test(seg)){
+    var normalized=seg.replace(/(^|\s|>)tag\.([a-zA-Z][\w-]*)/g,'$1$2');
+    if(normalized!==seg){var mixed=require('./cssRule').selectorToXpathChain(normalized,ctx);if(!mixed.error)return {xpath:mixed.xpath,notes:mixed.notes};}
+  }
   if (seg === "") return { error: "空段" };
   if (seg === "children") return { xpath: "/*", notes: notes };
   if (seg[0] === "[") {
+    if (/^\[[a-zA-Z_][\w-]*\s*(?:\^=|\$=|\*=|~=|!=|=).+\]$/.test(seg)) {
+      var attr = require("./cssRule").attrPredicateToXpath(seg);
+      if (attr.error) return { error: attr.error };
+      return { xpath: "//*" + attr.predicate, notes: notes };
+    }
     var spec = parseArraySpec(seg);
     if (!spec) return { error: "数组索引语法过复杂: " + seg };
     var r0 = arraySpecPredicates(spec);
@@ -253,7 +274,7 @@ function parseSegment(seg, ctx) {
     if (multiClass) {
       var mpreds = [];
       for (var ci = 0; ci < subParts.length; ci++) {
-        mpreds.push('contains(@class,"' + escAttr(subParts[ci]) + '")');
+        mpreds.push("contains(concat(' ', normalize-space(@class), ' '), ' " + escAttr(subParts[ci]) + " ')");
       }
       notes.push("多类名已合并为同节点条件（class=\"" + subParts.join(" ") + "\"），如为后代结构请人工调整");
       return { xpath: "/*[" + mpreds.join(" and ") + "]", notes: notes };
@@ -334,7 +355,7 @@ function parseSegment(seg, ctx) {
   var xp;
   switch (type) {
     case "class":
-      xp = '//*[contains(@class,"' + escAttr(name) + '")]';
+      xp = "//*[contains(concat(' ', normalize-space(@class), ' '), ' " + escAttr(name) + " ')]";
       break;
     case "id":
       xp = '//*[contains(@id,"' + escAttr(name) + '")]';
@@ -347,7 +368,7 @@ function parseSegment(seg, ctx) {
       break;
     case "rel":
       // rel.xxx：标签 rel + class 条件（WordPress 常见 <a rel=...> 场景按标签+类处理）
-      xp = '//rel[contains(@class,"' + escAttr(name) + '")]';
+      xp = "//rel[contains(concat(' ', normalize-space(@class), ' '), ' " + escAttr(name) + " ')]";
       break;
     default:
       return { error: "未知类型: " + type };
@@ -360,7 +381,9 @@ function parseSegment(seg, ctx) {
   }
   if (tagPreds) preds = preds.concat(tagPreds);
   if (position !== null) idxParts.push(indexToPosExpr(position));
-  if (exclusion) idxParts.push("not(" + exclusion.map(indexToPosExpr).join(" or ") + ")");
+  if (exclusion) idxParts.push("not(" + exclusion.map(function(i) {
+    return "position()=" + indexToPosExpr(i);
+  }).join(" or ") + ")");
   if (arraySpec) {
     var r2 = arraySpecPredicates(arraySpec);
     for (var a2 = 0; a2 < r2.preds.length; a2++) {
@@ -384,7 +407,11 @@ function convertDefault(rule, ctx) {
     var seg = segs[i].trim();
     if (!seg) continue;
     var isLast = i === segs.length - 1;
-    if (isLast && !hasTypePrefix(seg) && seg[0] !== "." && seg[0] !== "#" && seg[0] !== "[") {
+    // Trailing list segments like `id.main@li!0` are *selectors* with an
+    // exclusion index, not attributes named `li!0`. Treat these separately
+    // before deciding whether the final bare token is a content operator.
+    var lastIsIndexedTag = /^[a-zA-Z][\w-]*!-?\d+(?::-?\d+)*$/.test(seg);
+    if (isLast && !lastIsIndexedTag && !hasTypePrefix(seg) && seg[0] !== "." && seg[0] !== "#" && seg[0] !== "[") {
       // 末段裸词 = 内容操作或属性
       var m = mapContentOp(seg, ctx);
       acc = (acc === null ? "" : acc) + m.xpath;

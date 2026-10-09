@@ -3,82 +3,239 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Legado2XSGG · 开源阅读书源一键转换</title>
+<title>香色闺阁书源 · Legado 与 XSGG 转换工具</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #F8FAFC; color: #1E293B; min-height: 100vh; }
-  header { background: linear-gradient(135deg, #4F46E5, #6D28D9); color: #fff; padding: 22px 20px; }
-  header .wrap { max-width: 960px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-  header h1 { font-size: 21px; }
-  header p { font-size: 12px; opacity: .85; margin-top: 4px; }
-  header a { color: #fff; text-decoration: none; font-size: 13px; border: 1px solid rgba(255,255,255,.45); border-radius: 18px; padding: 6px 14px; }
-  main { max-width: 960px; margin: 0 auto; padding: 18px 16px 40px; }
-  .card { background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 18px; margin-top: 16px; box-shadow: 0 1px 3px rgba(15,23,42,.05); }
-  .card h2 { font-size: 15px; color: #4338CA; margin-bottom: 4px; }
-  .card .desc { font-size: 12px; color: #94A3B8; margin-bottom: 12px; line-height: 1.7; }
-  textarea { width: 100%; min-height: 150px; border: 1px solid #CBD5E1; border-radius: 10px; padding: 10px 12px; font-size: 12px; font-family: ui-monospace, Menlo, Consolas, monospace; resize: vertical; outline: none; }
-  textarea:focus { border-color: #818CF8; }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
-  button { border: none; cursor: pointer; border-radius: 20px; font-size: 13px; padding: 9px 18px; transition: filter .15s; }
-  button:hover { filter: brightness(.95); }
-  button:disabled { opacity: .5; cursor: not-allowed; }
-  .primary { background: #4F46E5; color: #fff; }
-  .secondary { background: #EEF2FF; color: #4338CA; }
-  .danger { background: #fff; color: #DC2626; border: 1.5px solid #FCA5A5; }
-  .ghost { background: transparent; color: #64748B; }
-  .warnbox { display: none; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: 12px; line-height: 1.9; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
-  .warnbox .red { color: #DC2626; }
-  .status { font-size: 12px; margin-top: 10px; color: #475569; min-height: 16px; }
-  .status.ok::before { content: "✓ "; color: #16A34A; }
-  .status.err::before { content: "✗ "; color: #DC2626; }
-  details { margin-top: 8px; font-size: 12px; color: #64748B; }
-  footer { text-align: center; font-size: 11px; color: #94A3B8; padding: 18px; line-height: 1.9; }
-  footer a { color: #6366F1; text-decoration: none; }
-  input[type=file] { display: none; }
-  @media (max-width: 600px) { header h1 { font-size: 18px; } .card { padding: 14px; } }
-  /* 可用性检测 */
-  #chkList { max-height: 340px; overflow: auto; border: 1px solid #E2E8F0; border-radius: 10px; padding: 8px 10px; margin-top: 10px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.7; display: none; background: #fff; }
-  .st-ok { color: #16A34A; } .st-moved { color: #D97706; } .st-blocked { color: #7C3AED; }
-  .st-dead { color: #DC2626; } .st-nourl, .st-unknown, .st-pending { color: #94A3B8; }
-  /* 更新通知横幅 */
-  .upbar { display: none; position: sticky; top: 0; z-index: 999; background: linear-gradient(90deg, #4F46E5, #7C3AED); color: #fff; padding: 10px 16px; box-shadow: 0 2px 10px rgba(67,56,202,.35); }
-  .upbar.show { display: block; animation: updown .35s ease; }
-  @keyframes updown { from { transform: translateY(-100%); opacity: 0; } to { transform: none; opacity: 1; } }
-  .upbar .uwrap { max-width: 960px; margin: 0 auto; display: flex; align-items: flex-start; gap: 12px; }
-  .upbar .ubody { flex: 1; font-size: 13px; line-height: 1.6; min-width: 0; }
-  .upbar b.ut { font-size: 14px; }
-  .upbar .udate { opacity: .8; font-size: 11px; margin-left: 8px; }
-  .upbar ul { margin: 4px 0 0 18px; padding: 0; }
-  .upbar li { margin: 2px 0; }
-  .upx { background: rgba(255, 255, 255, .15); border: none; color: #fff; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 14px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; line-height: 1; padding: 0; transition: all .2s ease; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-.upx:hover { background: rgba(255, 255, 255, .30); transform: scale(1.08); }
-.upx:active { transform: scale(.92); }
+:root {
+  color-scheme: light;
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --line: #e7ebf0;
+  --text: #202835;
+  --muted: #788392;
+  --subtle: #a2acb8;
+  --accent: #3d61d8;
+  --accent-strong: #314cb9;
+  --accent-soft: #eef3ff;
+  --radius: 13px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--text); background: var(--bg); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); }
+button, input, textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid rgba(66,99,218,.25); outline-offset: 3px; }
+[hidden] { display: none !important; }
+.icon { width: 19px; height: 19px; flex: 0 0 auto; vertical-align: middle; }
+.app-shell { display: flex; width: 100%; min-height: 100vh; }
+/* Left application navigation */
+.sidebar { position: sticky; top: 0; align-self: flex-start; width: 249px; height: 100vh; display: flex; flex-direction: column; padding: 24px 14px 15px; background: #fff; border-right: 1px solid var(--line); z-index: 40; flex: 0 0 249px; }
+.sidebar-brand { display: flex; align-items: center; gap: 11px; padding: 5px 13px 24px; text-decoration: none; color: var(--text); }
+.brand-icon { width: 35px; height: 35px; border-radius: 11px; background: #3f60d7; color: white; display: grid; place-items: center; font-size: 21px; font-weight: 750; letter-spacing: -.8px; }
+.brand-lines { display: flex; flex-direction: column; gap: 4px; white-space: nowrap; }
+.brand-lines strong { font-size: 15px; font-weight: 750; letter-spacing: -.3px; }
+.brand-lines small { color: #98a1ad; font-size: 11px; font-weight: 500; }
+.sidebar-nav { flex: 1; overflow-y: auto; padding: 0 3px 10px; scrollbar-width: thin; }
+.nav-heading { font-size: 11px; letter-spacing: .4px; color: #9aa4b1; font-weight: 650; padding: 18px 15px 9px; }
+.nav-heading-gap { margin-top: 14px; }
+.nav-item { width: 100%; min-height: 42px; margin: 2px 0; background: transparent; border: 0; color: #5f6977; font-size: 13px; font-weight: 530; border-radius: 9px; display: flex; align-items: center; gap: 12px; text-align: left; padding: 0 14px; transition: background .18s,color .18s; }
+.nav-item:hover { background: #f4f6f9; color: #303b4c; }
+.nav-item.is-active { color: var(--accent); background: var(--accent-soft); font-weight: 675; }
+.nav-item .icon { color: #8792a2; }
+.nav-item.is-active .icon { color: var(--accent); }
+.sidebar-bottom { margin-top: auto; padding: 12px 6px 5px; border-top: 1px solid #edf0f3; }
+.sidebar-bottom a { display: flex; align-items: center; gap: 11px; padding: 10px 11px; border-radius: 9px; color: #737e8b; text-decoration: none; font-size: 12px; }
+.sidebar-bottom a:hover { color: var(--accent); background: var(--accent-soft); }
+.sidebar-bottom .icon { width: 17px; height: 17px; }
+.sidebar-caption { padding: 10px 10px 0; color: #a4adb8; font-size: 10px; }
+.sidebar-backdrop { display: none; }
+/* Work area */
+.app-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.topbar { height: 68px; min-height: 68px; position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.97); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(24px,4.2vw,62px); }
+.topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; font-size: 13px; }
+.topbar-context { color: #9ba4af; }
+.topbar-separator { color: #ccd3dd; }
+.topbar-left strong { font-weight: 650; color: #444e5e; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.topbar-right { display: flex; align-items: center; gap: 8px; color: #8490a1; font-size: 11px; white-space: nowrap; }
+.online-dot { display: inline-block; width: 7px; height: 7px; background: #46ae75; border-radius: 50%; }
+.menu-trigger { display: none; border: 0; background: transparent; color: #4c5868; width: 36px; height: 36px; border-radius: 8px; align-items: center; justify-content: center; }
+.menu-trigger:hover { background: #f1f4f7; }
+.workspace { width: 100%; max-width: 1160px; padding: 36px clamp(24px,4.2vw,62px) 54px; margin: 0 auto; flex: 1; }
+.workspace-panel { animation: panelEnter .16s ease-out; }
+@keyframes panelEnter { from { opacity: .5; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.page-heading { margin-bottom: 24px; }
+.eyebrow { color: #9ba4af; font-size: 11px; font-weight: 620; margin-bottom: 9px; letter-spacing: .25px; }
+.page-heading h1 { font-size: clamp(22px,2.3vw,28px); letter-spacing: -.65px; color: #1b2430; line-height: 1.35; font-weight: 760; }
+.page-heading p { max-width: 690px; color: #8b96a5; font-size: 13px; line-height: 1.75; margin-top: 9px; }
+/* Cards and form controls */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: clamp(18px,2.8vw,28px); margin-top: 16px; box-shadow: 0 2px 10px rgba(20,38,64,.025); }
+.card:first-of-type { margin-top: 0; }
+.card h2 { font-size: 15px; line-height: 1.5; font-weight: 700; color: #2a3340; margin-bottom: 6px; }
+.card .desc { font-size: 12px; color: #8a95a3; line-height: 1.8; margin-bottom: 13px; }
+textarea { display: block; width: 100%; min-height: 150px; border: 1px solid #dce2ea; border-radius: 9px; background: #fff; color: #334155; padding: 13px 14px; font-size: 12px; line-height: 1.7; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; resize: vertical; outline: none; transition: border-color .15s,box-shadow .15s; }
+textarea::placeholder { color: #aab3bf; }
+textarea:focus { border-color: #839beb; box-shadow: 0 0 0 3px rgba(64,94,211,.08); }
+textarea[readonly] { background: #fafbfd; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 12px; }
+.row label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; vertical-align: middle; }
+input[type=number] { color: #3d4552; }
+input[type=file] { display: none; }
+button.primary, button.secondary, button.danger, button.ghost, .inline-nav-link { border-radius: 8px; padding: 9px 15px; border: 1px solid transparent; font-size: 12px; font-weight: 640; line-height: 1.4; transition: background .15s,color .15s,border .15s; }
+.primary { background: var(--accent); color: #fff; }
+.primary:hover:not(:disabled) { background: var(--accent-strong); }
+.secondary { color: #405cbb; border-color: #e5ebfc !important; background: #f1f5ff; }
+.secondary:hover:not(:disabled) { background: #e8efff; }
+.ghost { background: transparent; color: #6e7b8b; }
+.ghost:hover:not(:disabled) { background: #f5f7f9; color: #344052; }
+.danger { background: #fff; color: #cc4545; border: 1px solid #f3d2d2 !important; }
+.inline-nav-link { background: transparent; color: var(--accent); padding-left: 6px; padding-right: 6px; }
+.inline-nav-link:hover { background: #f4f6ff; }
+.inline-nav-link span { margin-left: 5px; }
+.status { color: #687588; font-size: 12px; line-height: 1.7; min-height: 15px; margin-top: 12px; }
+.status.ok { color: #26956a; }
+.status.ok::before { content: "✓ "; }
+.status.err { color: #d05252; }
+.status.err::before { content: "✕ "; }
+.warnbox { display: none; padding: 12px 14px; margin-top: 14px; border: 1px solid #f4dfb1; border-radius: 9px; background: #fffcf4; color: #7c6a47; font-size: 12px; line-height: 1.9; max-height: 230px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.warnbox .red { color: #d44848; }
+#chkList { display: none; max-height: 345px; overflow: auto; background: #fafbfd; border: 1px solid #e4e9ef; border-radius: 9px; padding: 12px 15px; margin-top: 12px; font: 12px/1.9 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.st-ok { color: #2b9c6f; }
+.st-moved { color: #b98925; }
+.st-blocked { color: #9075c3; }
+.st-dead { color: #cc5656; }
+.st-nourl, .st-unknown, .st-pending { color: #92a0ae; }
+.sub-section-heading { font-size: 13px; color: #4f5a69; font-weight: 650; margin-top: 24px; margin-bottom: 11px; }
+/* Latest bundle */
+.bundle-topline { display: flex; align-items: center; gap: 14px; }
+.bundle-mark { width: 47px; height: 47px; display: flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); border-radius: 12px; }
+.bundle-mark .icon { width: 22px; height: 22px; }
+.bundle-topline h2 { margin: 0; font-size: 16px; }
+.bundle-subtitle { color: #909baa; margin-top: 4px; font-size: 12px; line-height: 1.7; }
+.bundle-tag { border: 1px solid #e5eaf8; margin-left: auto; align-self: flex-start; border-radius: 20px; color: #5470ca; background: #f6f8ff; padding: 5px 10px; font-size: 11px; white-space: nowrap; }
+.bundle-facts { margin-top: 26px; margin-bottom: 23px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.bundle-facts div { border: 1px solid #e8ecf2; background: #fbfcfe; border-radius: 9px; padding: 18px 17px; display: flex; flex-direction: column; gap: 4px; }
+.bundle-facts strong { color: #26334e; font-size: 22px; font-weight: 740; letter-spacing: -.4px; }
+.bundle-facts span { font-size: 11px; color: #92a0b0; }
+.download-primary { display: inline-flex; align-items: center; gap: 9px; background: var(--accent); color: #fff; text-decoration: none; padding: 12px 18px; border-radius: 9px; font-size: 13px; font-weight: 680; }
+.download-primary:hover { background: var(--accent-strong); }
+.download-primary .icon { width: 17px; height: 17px; }
+.download-url { margin-top: 13px; color: #96a1af; font-size: 11px; word-break: break-all; }
+.download-url a { text-decoration: none; color: #7182b3; }
+.download-url a:hover { text-decoration: underline; }
+.inline-note { font-size: 12px; line-height: 1.85; color: #66748a; padding: 12px 14px; background: #f8faff; border: 1px solid #eaf0fb; border-radius: 9px; margin-top: 18px; }
+.inline-note code { color: #4c6398; font-family: ui-monospace,Menlo,monospace; }
+.muted-note { background: #fdfdfd; border-color: #edf0f3; color: #8e98a6; }
+.card-section-title { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.card-section-title h2 { margin: 0; }
+.card-section-title span { font-size: 11px; color: #9aa5b0; }
+.source-chip-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.source-chip-grid span { padding: 8px 12px; font-size: 12px; color: #637184; background: #f7f9fc; border: 1px solid #e9edf3; border-radius: 7px; }
+/* Guide */
+.guide-steps { list-style: none; margin: 14px 0 0; display: grid; gap: 17px; counter-reset: steps; }
+.guide-steps li { position: relative; padding-left: 43px; min-height: 32px; counter-increment: steps; }
+.guide-steps li::before { content: counter(steps); position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 8px; background: #f0f4ff; color: var(--accent); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.guide-steps strong { color: #435064; font-size: 13px; }
+.guide-steps p { color: #8996a6; font-size: 12px; line-height: 1.8; margin-top: 2px; }
+.faq-details { font-size: 12px; color: #6e7b88; }
+.faq-details summary { font-weight: 650; color: #566477; cursor: pointer; padding: 5px 0; }
+.faq-details div { margin-top: 11px; line-height: 2; }
+.faq-details code { color: #62748c; }
+/* Updates in their own panel, no full-width purple notice */
+.upbar { display: none; border: 1px solid #e7ecf2; background: #f9fbff; border-radius: 10px; padding: 18px; color: #465367; margin-top: 14px; }
+.upbar.show { display: block; }
+.upbar .uwrap { display: flex; align-items: flex-start; gap: 12px; }
+.upbar .ubody { flex: 1; min-width: 0; font-size: 12px; line-height: 1.9; }
+.upbar b.ut { font-size: 14px; color: #344259; }
+.upbar .udate { font-size: 11px; color: #9aa6b3; margin-left: 10px; }
+.upbar ul { margin: 12px 0 0 18px; }
+.upbar li { margin: 4px 0; }
+.upx { background: #eef2f8; color: #8290a0; display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 26px; border: 0; border-radius: 8px; font-size: 17px; line-height: 1; }
+.upx:hover { background: #e3eaf5; color: #506077; }
+.update-loading { color: #9aa5b2; font-size: 12px; margin-top: 8px; }
+.release-item { border-bottom: 1px solid #eff1f5; padding: 19px 1px; }
+.release-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.release-item:first-child { padding-top: 14px; }
+.release-item strong { font-size: 12px; color: #3f4c5c; }
+.release-item time { float: right; font-size: 11px; color: #a1aab4; }
+.release-item ul { margin: 12px 0 0 19px; font-size: 12px; color: #7e8a99; line-height: 1.95; }
+/* Footer */
+footer { color: #a3adba; text-align: center; font-size: 11px; line-height: 1.9; padding: 2px 20px 26px; }
+footer span { font-size: 10px; }
+/* Touch screen / small laptop */
+@media (max-width: 920px) {
+  .sidebar { position: fixed; left: 0; top: 0; height: 100dvh; width: 266px; flex-basis: 266px; transform: translateX(-105%); transition: transform .21s ease; box-shadow: 8px 0 24px rgba(23,38,69,.06); }
+  .sidebar-open .sidebar { transform: translateX(0); }
+  .sidebar-backdrop { display: none; position: fixed; inset: 0; width: 100vw; height: 100dvh; padding: 0; border: 0; background: rgba(26,36,52,.34); z-index: 35; }
+  .sidebar-open .sidebar-backdrop { display: block; }
+  .menu-trigger { display: flex; }
+  .topbar { padding-left: 19px; padding-right: 22px; }
+  .workspace { padding: 27px 24px 42px; }
+}
+@media (max-width: 600px) {
+  .topbar { height: 60px; min-height: 60px; padding: 0 12px; }
+  .topbar-left { gap: 7px; font-size: 12px; }
+  .topbar-right { font-size: 0; padding: 0 12px 0 0; }
+  .online-dot { width: 7px; height: 7px; }
+  .workspace { padding: 21px 14px 36px; }
+  .page-heading { margin-bottom: 19px; }
+  .page-heading h1 { font-size: 23px; }
+  .page-heading p { font-size: 12px; }
+  .card { padding: 17px 15px; margin-top: 13px; border-radius: 11px; }
+  .row { gap: 8px; }
+  .row label { line-height: 1.8; }
+  textarea { font-size: 12px; padding: 12px; }
+  .bundle-facts { gap: 7px; }
+  .bundle-facts div { padding: 14px 11px; }
+  .bundle-facts strong { font-size: 19px; }
+  .bundle-tag { display: none; }
+  .source-chip-grid { gap: 8px; }
+  .source-chip-grid span { padding: 7px 10px; }
+  .upbar { padding: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
 </style>
+<link rel="stylesheet" href="./ai-assistant.css">
 </head>
 <body>
 
-<header>
-  <div class="wrap">
-    <div>
-      <h1>Legado2XSGG</h1>
-      <p>开源阅读书源 → 香色闺阁书源 · 纯前端转换，数据不出浏览器</p>
+<div class="app-shell">
+  <aside class="sidebar" id="siteSidebar" aria-label="主导航">
+    <a href="#convert" class="sidebar-brand" data-panel="convert" aria-label="香色闺阁书源 首页">
+      <span class="brand-icon">L</span>
+      <span class="brand-lines"><strong>香色闺阁书源</strong><small>书源工作台</small></span>
+    </a>
+    <nav class="sidebar-nav" aria-label="功能导航">
+<div class="nav-heading">工作台</div>
+<button type="button" class="nav-item is-active" data-panel="convert" aria-current="page"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h14l-4-4m4 4-4 4"/><path d="M20 17H6l4-4m-4 4 4 4"/></svg><span>书源转换</span></button>
+<button type="button" class="nav-item" data-panel="check"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M20 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11"/></svg><span>可用性检测</span></button>
+<button type="button" class="nav-item" data-panel="xbs"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 9-3 3 3 3m8-6 3 3-3 3m-4-9-2 12"/></svg><span>XBS 文件工具</span></button>
+<div class="nav-heading nav-heading-gap">资源与帮助</div>
+<button type="button" class="nav-item" data-panel="downloads"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></svg><span>最新整合包</span></button>
+<button type="button" class="nav-item" data-panel="guide"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/><path d="M9 7h7m-7 4h5"/></svg><span>使用说明</span></button>
+<button type="button" class="nav-item" data-panel="updates"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>更新日志</span></button>
+</nav>
+<div class="sidebar-bottom">
+  <a href="https://github.com/ljun223/legado2xsgg" target="_blank" rel="noopener noreferrer"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 19c-4 1.5-4-2.5-6-3m12 6v-3.9a3.4 3.4 0 0 0-.9-2.7c3-.3 6.1-1.5 6.1-6.7a5.2 5.2 0 0 0-1.4-3.6 4.8 4.8 0 0 0-.1-3.6s-1.2-.4-3.7 1.4a12.8 12.8 0 0 0-6.8 0C5.7.1 4.5.5 4.5.5a4.8 4.8 0 0 0-.1 3.6A5.2 5.2 0 0 0 3 7.7c0 5.2 3.1 6.4 6.1 6.7a3.4 3.4 0 0 0-.9 2.7V22"/></svg><span>GitHub 项目</span></a>
+      <a href="https://github.com/ljun223/legado2xsgg/raw/main/releases/xbsrebuild.apk" target="_blank" rel="noopener noreferrer"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>Android APK</span></a>
+      <div class="sidebar-caption">开源 · 本地浏览器转换</div>
     </div>
-    <a href="https://github.com/ljun223/legado2xsgg" target="_blank">GitHub / APK 下载</a>
-  </div>
-</header>
-
-<div class="upbar" id="upbar">
-  <div class="uwrap">
-    <div class="ubody">
-      <b class="ut" id="upTitle">更新</b><span class="udate" id="upDate"></span>
-      <ul id="upItems"></ul>
-    </div>
-    <button class="upx" id="upX" title="关闭">×</button>
-  </div>
-</div>
-
-<main>
-  <!-- 书源转换 -->
+  </aside>
+  <button type="button" class="sidebar-backdrop" id="sidebarBackdrop" aria-label="关闭导航菜单"></button>
+  <div class="app-content">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button type="button" class="menu-trigger" id="menuTrigger" aria-label="打开侧边栏" aria-controls="siteSidebar" aria-expanded="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+        <span class="topbar-context">工作台</span><span class="topbar-separator">/</span><strong id="topbarTitle">书源转换</strong>
+      </div>
+      <div class="topbar-right"><button type="button" class="ai-topbar-btn" id="aiSettingsOpen" aria-haspopup="dialog" aria-controls="aiSettingsDialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.86 1.86-.06-.06A1.7 1.7 0 0 0 16 18.4a1.7 1.7 0 0 0-1 .6v.08h-3v-.08a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.88.34l-.06.06-1.86-1.86.06-.06A1.7 1.7 0 0 0 7.6 15a1.7 1.7 0 0 0-.6-1H7v-3h.08A1.7 1.7 0 0 0 7.6 10a1.7 1.7 0 0 0-.34-1.88L7.2 8.06 9.06 6.2l.06.06A1.7 1.7 0 0 0 11 6.6a1.7 1.7 0 0 0 1-.6V6h3v.08a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.88-.34l.06-.06 1.86 1.86-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 .6 1H20v3h-.08a1.7 1.7 0 0 0-.52 1Z"/></svg>AI 设置</button><span class="online-dot"></span><span>转换在浏览器完成 · AI 使用个人 Key</span></div>
+    </header>
+    <main class="workspace" id="workspace">
+<section class="workspace-panel is-active" id="panel-convert" data-panel-section="convert"><div class="page-heading"><div class="eyebrow">工具 / 转换</div><h1>书源转换</h1><p>将开源阅读（Legado）书源转换为香色闺阁格式，支持 JSON 文件、订阅链接和批量导出。</p></div><!-- 书源转换 -->
   <div class="card">
     <h2>开源阅读书源一键转换</h2>
     <div class="desc">
@@ -94,11 +251,24 @@
     <div style="margin-top:10px">
       <textarea id="input" placeholder='在此粘贴开源阅读书源 JSON 或订阅链接…&#10;支持：直接填写阅读订阅链接 / [ {...}, {...} ] 数组 / 单个书源对象 / {"0":{...}} 导出格式'></textarea>
     </div>
+    <div class="row" style="align-items:center; gap:16px; font-size:13px; color:#475569;">
+      <label><input type="checkbox" id="forceEnableAll" checked> 全部启用（iOS 推荐）</label>
+      <label><input type="checkbox" id="autoDomainProbe" checked> 自动检测域名迁移（单次最多 6 源）</label>
+      <label><input type="checkbox" id="forceWeight" checked> 统一权重</label>
+      <label>权重 <input type="number" id="defaultWeight" min="1" value="100" style="width:74px; padding:5px 7px; border:1px solid #CBD5E1; border-radius:6px;"></label>
+    </div>
+    <div class="desc" style="margin:5px 0 8px">修复版：enable 输出整数 1/0；权重至少为 1。取消勾选可保留 Legado 原始状态或原有效权重。</div>
     <div class="row">
       <button class="primary" id="convertBtn" onclick="doConvert()">开始转换</button>
+      <button type="button" class="inline-nav-link" onclick="navigateToPanel('downloads')">查看最新 14 源整合包 <span aria-hidden="true">→</span></button>
+    </div>
+    <div class="row" style="font-size:12px;color:#475569;">
+      <label><input type="checkbox" id="onlyManualWarnings" checked> 仅显示需要核对的提示（取消勾选查看全部）</label>
     </div>
     <div class="warnbox" id="warnbox"></div>
     <div class="status" id="status"></div>
+    <div id="domainCheckStatus" style="margin-top:6px;font-size:12px;color:#657386;line-height:1.7" aria-live="polite"></div>
+    <div id="domainCheckResults" hidden style="margin:7px 0 10px;padding:10px 13px;background:#f8fafc;border:1px solid #e6ecf3;border-radius:8px;color:#566579;font-size:12px;line-height:1.8;overflow-wrap:anywhere"></div>
     <div style="margin-top:10px">
       <textarea id="output" placeholder="转换结果（香色闺阁书源 JSON）…" readonly style="min-height:200px"></textarea>
     </div>
@@ -108,8 +278,51 @@
       <button class="secondary" onclick="downloadXbs()" disabled id="dlXbsBtn">加密为 XBS 并下载</button>
     </div>
   </div>
-
-  <!-- 书源可用性检测 -->
+<div class="card ai-repair-card" id="aiRepairCard">
+  <h2>AI 辅助修复</h2>
+  <p class="ai-repair-intro">先让服务器真实访问小说网站，依次检测搜索、详情、目录和正文，再让你自己的 AI 根据网页结果分析失败原因。遇到站点超时或反爬会如实显示；修复候选仍需你手动确认。</p>
+  <div class="ai-repair-grid">
+    <div><label for="aiRepairSource">需要修复的书源</label><select id="aiRepairSource"><option value="">先读取当前转换结果</option></select></div>
+    <button type="button" class="ai-action secondary" id="aiReadSources">读取当前书源</button>
+  </div>
+  <div class="row ai-example-row"><button type="button" class="ai-action secondary" id="aiLoadThreeExamples">载入本次三条书源</button><button type="button" class="ai-action ghost" id="aiLoadTianxiaExample">载入笔趣阁旧样例</button><span class="ai-example-note">测试源的域名目前可能无法访问，真实结果以联网检测为准。</span>
+  </div>
+  <div class="ai-confirmed-samples">
+    <a href="./downloads/auto-repaired-two.xbs">下载本次修复的两条书源 XBS</a>
+    <a href="./downloads/auto-repaired-two.json">下载两条 JSON</a>
+    <a href="./downloads/lemon-diagnostic.json">查看柠檬小说不可达报告</a>
+  </div>
+  <div class="ai-field ai-span">
+    <label for="aiRepairProblem">自动生成的检测诊断（可补充，可留空）</label>
+    <textarea id="aiRepairProblem" class="ai-repair-problem" placeholder="无需手动输入，运行网站检测后会自动填写请求失败、XPath 不匹配及网站结构等诊断信息。"></textarea>
+    <div class="ai-field-help">网站检测会自动填写网络失败、字段匹配数量和 XPath 问题，无需人工输入。只有点击「使用我的 AI」才会向你配置的模型发送当前书源和证据；勿填写 Cookie 或私人凭据。</div>
+  </div>
+  <div class="ai-repair-grid ai-site-check-input">
+    <div class="ai-field"><label for="aiProbeKeyword">测试关键词</label><input id="aiProbeKeyword" type="text" maxlength="50" value="斗破苍穹" placeholder="输入要搜索的小说名称"><div class="ai-field-help">联网检测不需要 API Key。仅允许服务器审核过的公网书源域名，不会执行网页脚本、Cookie 或登录操作。</div></div>
+    <button type="button" class="ai-action secondary" id="aiSiteProbe">检测网站（不调用 AI）</button>
+  </div>
+  <div class="row"><button type="button" class="ai-action" id="aiAutoRepairRun">自动修复并复测（无需 API Key）</button><button type="button" class="ai-action secondary" id="aiRepairRun">使用我的 AI 进一步分析</button></div>
+  <div id="aiWebEvidence" class="ai-web-evidence" hidden>
+    <h3>真实 HTTP / 网页解析检测</h3>
+    <p id="aiWebEvidenceIntro">服务器读取网站搜索、详情、目录和正文的真实 HTTP 结果。</p>
+    <div id="aiWebEvidenceSteps" class="ai-web-steps"></div>
+    <div id="aiWebEvidenceNotes" class="ai-repair-notice" style="white-space:pre-wrap"></div>
+  </div>
+  <div id="aiRepairStatus" class="ai-repair-status">可以先点击「检测网站」（无需 API Key）；使用「联网检测并让 AI 修复」前，请在右上角设置自己的模型。</div>
+  <div id="aiRepairResult" class="ai-repair-result" hidden>
+    <h3>自动修复 / AI 修改建议</h3>
+    <p id="aiRepairSummary"></p>
+    <div id="aiRepairPatches"></div>
+    <div class="ai-repair-notice" id="aiRepairWarnings" style="white-space:pre-wrap"></div>
+    <div class="ai-repair-notice"><strong>重要：</strong>联网检测会实际发送 HTTP 请求并解析静态 HTML；遇到超时、反爬或需要 WebView 的规则会显示受限，不代表 iOS App 已通过。修改仍需你手动确认。</div>
+    <div class="ai-repair-footer">
+      <button type="button" class="ai-action" id="aiApplyFix" disabled>确认应用到本地结果</button>
+      <button type="button" class="ai-action secondary" id="aiExportFixJson" disabled>下载单源 JSON</button>
+      <button type="button" class="ai-action secondary" id="aiExportFixXbs" disabled>下载单源 XBS</button>
+    </div>
+  </div>
+</div></section>
+<section class="workspace-panel" id="panel-check" data-panel-section="check" hidden><div class="page-heading"><div class="eyebrow">工具 / 检测</div><h1>书源可用性检测</h1><p>对书源地址进行批量连通性检查，区分可达、迁移、疑似防护与失效状态。</p></div><!-- 书源可用性检测 -->
   <div class="card">
     <h2>书源可用性检测</h2>
     <div class="desc">支持阅读/香色闺阁订阅包（含 .xbs 加密包）。粘贴订阅链接、JSON 或直接选择文件，逐源探测 URL 可达性。<br>
@@ -133,13 +346,12 @@
     <div style="margin-top:6px;font-size:12px;color:#475569">
       <label><input type="checkbox" id="chkXbsBox"> 导出为 .xbs（XXTEA 加密，可直接导入香色闺阁）</label>
     </div>
-  </div>
-
-  <!-- XBS 工具 -->
+  </div></section>
+<section class="workspace-panel" id="panel-xbs" data-panel-section="xbs" hidden><div class="page-heading"><div class="eyebrow">工具 / 文件</div><h1>XBS 文件工具</h1><p>查看 XBS 加密书源内容，解密结果可以在当前页面直接复制或导出。</p></div><!-- XBS 工具 -->
   <div class="card">
     <h2>XBS 文件解密查看</h2>
     <div class="desc">
-      选择香色闺阁导出的 <b>.xbs</b> 文件（XXTEA 加密的 JSON），解密查看内容。加密导出请用上方「加密为 XBS 并下载」。
+      选择香色闺阁导出的 <b>.xbs</b> 文件（XXTEA 加密的 JSON），解密查看内容。解密结果会直接显示在当前面板，可复制或导出 JSON。如需重新加密，请使用「书源转换」面板。
     </div>
     <div class="row">
       <button class="secondary" onclick="document.getElementById('xbsFile').click()">选择 .xbs 文件</button>
@@ -147,9 +359,51 @@
       <button class="ghost" onclick="clearXbs()">清空</button>
     </div>
     <div class="status" id="xbsStatus"></div>
-  </div>
+<div class="sub-section-heading">解密结果</div>
+<textarea id="xbsOutput" readonly placeholder="选择 XBS 文件后，解密后的 JSON 会显示在这里…" style="min-height:230px"></textarea>
+<div class="row">
+  <button class="secondary" onclick="copyXbsText()" disabled id="xbsCopyBtn">复制 JSON</button>
+  <button class="secondary" onclick="downloadXbsText()" disabled id="xbsJsonBtn">下载 JSON</button>
+</div>
 
-  <details>
+  </div></section>
+<section class="workspace-panel" id="panel-downloads" data-panel-section="downloads" hidden><div class="page-heading"><div class="eyebrow">资源 / 下载</div><h1>最新整合包</h1><p>维护中的香色闺阁书源合集，保持一个稳定的下载地址。</p></div>
+<div class="card download-feature">
+  <div class="bundle-topline">
+    <div class="bundle-mark"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8m-8 4h8"/></svg></div>
+    <div><h2>香色闺阁最新整合包</h2><p class="bundle-subtitle">已整合维护的书源规则，可直接导入香色闺阁。</p></div>
+    <span class="bundle-tag">最新版</span>
+  </div>
+  <div class="bundle-facts">
+    <div><strong>14</strong><span>个书源</span></div>
+    <div><strong>XBS</strong><span>导入格式</span></div>
+    <div><strong>ZIP</strong><span>下载文件</span></div>
+  </div>
+  <a class="download-primary" href="./downloads/xiangse_latest.zip" download="xiangse_latest.zip"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></svg>下载整合包 ZIP</a>
+  <p class="download-url">下载地址：<a href="./downloads/xiangse_latest.zip" download="xiangse_latest.zip">/downloads/xiangse_latest.zip</a></p>
+  <div class="inline-note">下载后解压 ZIP，得到 <code>xiangse_latest.xbs</code>，然后在香色闺阁中导入。旧版已经导入的书源不会自动删除。</div>
+</div>
+<div class="card">
+  <div class="card-section-title"><h2>包含的书源</h2><span>14 个 · 去除重复起点</span></div>
+  <div class="source-chip-grid">
+    <span>🎉起点中文网</span><span>得奇小说网</span><span>篱笆好文学</span><span>速读谷</span>
+    <span>小原文学网</span><span>思路客</span><span>错层小说</span><span>文桑小说</span>
+    <span>全本小说网</span><span>抖音小说</span><span>可乐小说</span><span>鬼吹灯</span>
+    <span>魔丸小说</span><span>菠萝猫</span>
+  </div>
+  <div class="inline-note muted-note">注意：规则格式通过不代表所有网站始终可访问。得奇的 iOS WebView 正文尚待手机验证；可乐小说可能返回 403，抖音小说限制短关键词，全本小说网部分章节可能受限。</div>
+</div>
+</section>
+<section class="workspace-panel" id="panel-guide" data-panel-section="guide" hidden><div class="page-heading"><div class="eyebrow">帮助 / 说明</div><h1>使用说明</h1><p>从导入书源到导出 XBS，快速了解工具的使用方式和常见注意事项。</p></div>
+<div class="card help-card">
+  <h2>快速上手</h2>
+  <ol class="guide-steps">
+    <li><strong>准备书源</strong><p>从开源阅读导出 JSON 文件，或复制书源订阅链接。</p></li>
+    <li><strong>转换书源</strong><p>进入「书源转换」上传文件或粘贴 JSON，点击开始转换。可选择全部启用与权重。</p></li>
+    <li><strong>导出并导入</strong><p>转换完成后下载 XBS，使用香色闺阁导入。若网页端提示规则需人工核对，请先确认对应站点。</p></li>
+  </ol>
+</div>
+<div class="card"><h2>常见问题</h2><details open class="faq-details">
     <summary>说明与常见问题</summary>
     <div style="margin-top:8px;line-height:2">
       · 转换引擎与本仓库 <code>converter/</code> 完全同源（converter.bundle.js），App 内置的也是同一份。<br>
@@ -157,14 +411,62 @@
       · XBS 文件 = XXTEA 加密的 JSON（末尾 4 字节小端存放原始长度），本页加解密与官方格式字节兼容。<br>
       · 本工具仅供学习交流，请勿用于商业用途。
     </div>
-  </details>
-</main>
+  </details></div>
+</section>
+<section class="workspace-panel" id="panel-updates" data-panel-section="updates" hidden><div class="page-heading"><div class="eyebrow">帮助 / 更新</div><h1>更新日志</h1><p>查看转换工具的版本更新和功能变化。</p></div><div class="card update-card"><h2>最新版本</h2><p class="update-loading" id="updateLoading">正在读取更新信息…</p><div class="upbar" id="upbar">
+  <div class="uwrap">
+    <div class="ubody">
+      <b class="ut" id="upTitle">更新</b><span class="udate" id="upDate"></span>
+      <ul id="upItems"></ul>
+    </div>
+    <button class="upx" id="upX" title="关闭">×</button>
+  </div>
+</div></div><div class="card"><h2>历史版本</h2><div id="updateHistory" class="release-history"></div></div></section>
+    </main>
+    <footer>
+      香色闺阁书源 · 开源阅读 → 香色闺阁 · MIT License<br>
+      <span>转换在浏览器本地完成，规则兼容性仍需以对应 App 的实际使用为准。</span>
+    </footer>
+  </div>
+</div>
 
-<footer>
-  Legado2XSGG · MIT License ·
-  <a href="https://github.com/ljun223/legado2xsgg" target="_blank">GitHub</a> ·
-  <a href="https://github.com/ljun223/legado2xsgg/raw/main/releases/xbsrebuild.apk" target="_blank">下载 Android App</a>
-</footer>
+
+<dialog id="aiSettingsDialog" class="ai-dialog" aria-labelledby="aiSettingsTitle">
+  <div class="ai-dialog-inner">
+    <div class="ai-dialog-header">
+      <div><h2 id="aiSettingsTitle">AI 模型设置</h2><p>自定义 API Key / 接口地址，无订阅账号、无需 OAuth</p></div>
+      <button type="button" class="ai-close-btn" id="aiSettingsClose" aria-label="关闭模型设置">×</button>
+    </div>
+    <div class="ai-privacy">
+      <strong>你的配置只属于当前浏览器。</strong>API 地址、API Key、模型与参数只保存在当前浏览器的 <code>localStorage</code>，不同用户、不同浏览器之间不共享；服务器不保存到数据库、磁盘文件或访问日志。<br>
+      点击「读取模型」「测试连接」「AI 修复」时，Key 会随本次请求<strong>临时经过 Node.js 服务端转发至你选择的 AI 提供商</strong>；服务端不会保留 Key。可点击下方「清除本地配置」或清除浏览器网站数据删除设置。
+      <div class="ai-http-warning"><strong>安全提醒：</strong>当前公网页面使用 HTTP，浏览器发送的 API Key 没有 HTTPS 传输保护。不要在不可信网络中发送真实 Key；担心隐私请自己通过 Docker 部署并使用 HTTPS。浏览器扩展与具有本站脚本权限的代码也可能访问 localStorage。</div>
+    </div>
+    <div class="ai-config-grid">
+      <div class="ai-field ai-span"><label for="aiApiType">API 协议类型</label>
+        <select id="aiApiType"><option value="openai-completions">OpenAI 兼容（Chat Completions）</option><option value="openai-responses">OpenAI Responses API</option><option value="anthropic-messages">Anthropic Messages API</option><option value="google-generative-ai">Google Gemini 原生 API</option></select>
+        <div class="ai-field-help">OpenRouter、DeepSeek、GLM、Qwen、Ollama 等兼容服务可选 OpenAI 兼容。Gemini 原生接口仅支持 Google 官方域名。</div>
+      </div>
+      <div class="ai-field ai-span"><label for="aiBaseUrl">自定义 API 地址（Base URL）</label><input id="aiBaseUrl" type="url" placeholder="https://your-api.example.com/v1" autocomplete="off" spellcheck="false"><div class="ai-field-help">填写 API 根地址，通常以 /v1 结尾，不要带 /chat/completions 或完整请求路径。共享服务仅允许公网 HTTPS 地址。</div></div>
+      <div class="ai-field ai-span"><label for="aiApiKey">API Key</label><div class="ai-key-row"><input id="aiApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…"><button type="button" id="aiToggleKey">显示</button></div><div class="ai-field-help">Key 仅写入本浏览器 localStorage；服务端不提供公共 API Key。</div></div>
+      <div class="ai-field ai-span"><label for="aiModels">从 API 读取模型列表（可选）</label><select id="aiModels"><option value="">读取后选择，或直接手动输入</option></select></div>
+      <div class="ai-field ai-span"><label for="aiModel">模型 ID（允许手动填写）</label><input id="aiModel" type="text" placeholder="例如：gpt-4o-mini、qwen-plus、deepseek-chat" autocomplete="off" spellcheck="false"></div>
+      <div class="ai-field"><label for="aiMaxTokens">最多输出 Token（不是上下文窗口）</label><input id="aiMaxTokens" type="number" min="128" max="262144" value="8192"><div class="ai-field-help">推荐 8192；可按需设至 262144（256K）。最大输出仅是允许的上限，并不要求模型生成这么多。实际以所选模型支持为准；1M 上下文不等于输出上限。</div></div>
+      <div class="ai-field"><label for="aiTemperature">Temperature（可留空）</label><input id="aiTemperature" type="number" min="0" max="2" step="0.1" placeholder="不发送" value=""></div>
+      <div class="ai-field"><label for="aiTokenField">输出 Token 字段（OpenAI 兼容）</label><select id="aiTokenField"><option value="auto">自动判断</option><option value="max_tokens">max_tokens（多数第三方）</option><option value="max_completion_tokens">max_completion_tokens</option></select></div>
+      <div class="ai-field"><label for="aiSystemRole">系统消息角色（OpenAI 兼容）</label><select id="aiSystemRole"><option value="auto">自动判断</option><option value="system">system（多数第三方）</option><option value="developer">developer（部分 OpenAI 模型）</option></select></div>
+      <div class="ai-field"><label for="aiReasoning">思考级别</label><select id="aiReasoning"><option value="off">关闭 / 默认</option><option value="minimal">Minimal</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">XHigh</option></select></div>
+      <div class="ai-field"><label for="aiSamplingParams">高级参数 JSON（选填）</label><textarea id="aiSamplingParams" placeholder='{"top_p":0.9}'>{}</textarea></div>
+    </div>
+    <div class="ai-settings-actions">
+      <button type="button" class="ai-action secondary" id="aiLoadModels">读取模型列表</button>
+      <button type="button" class="ai-action secondary" id="aiTestConnection">测试连接</button>
+      <button type="button" class="ai-action" id="aiSaveSettings">仅保存到当前浏览器</button>
+      <button type="button" class="ai-action ghost" id="aiClearSettings">清除本地配置</button>
+    </div>
+    <div id="aiSettingsStatus" class="ai-settings-status" role="status"></div>
+  </div>
+</dialog>
 
 <script src="./converter.bundle.js"></script>
 <script>
@@ -371,15 +673,69 @@ function fetchSubscription(url) {
   }
   return attempt();
 }
+// Keep the full report for download/stats; by default display only actionable warnings.
+var lastConversionDiagnostics = null;
+function renderWarnings(r) {
+  var wb = $("warnbox");
+  wb.innerHTML = "";
+  var allWarns = r.warnings || [];
+  var warns = $("onlyManualWarnings").checked ? allWarns.filter(isManual) : allWarns;
+  var fails = r.failures || [];
+  var totalLines = warns.length + fails.length;
+  if (!totalLines) { wb.style.display = "none"; return; }
+  var critical = allWarns.filter(function(w) { return w.level === "unsupported" || w.level === "error"; }).length;
+  var manualCount = allWarns.filter(isManual).length;
+  var title = document.createElement("div");
+  var label = $("onlyManualWarnings").checked ? "需人工核对 " + manualCount : "全部 " + allWarns.length;
+  title.textContent = "转换提示（" + label + " 条：严重 " + critical + "，其他人工核对 " + Math.max(0, manualCount - critical) + "，说明 " + (allWarns.length - manualCount) + "）";
+  title.style.fontWeight = "bold";
+  wb.appendChild(title);
+  var shown = 0;
+  warns.forEach(function(w) {
+    if (shown >= WARN_CAP) return;
+    shown++;
+    var line = "[" + (w.level || "") + "]"
+      + (w.source ? "[" + w.source + "]" : "")
+      + (w.module ? "[" + w.module + "] " : "") + (w.msg || "");
+    var div = document.createElement("div");
+    div.textContent = line;
+    if (isManual(w)) div.className = "red";
+    wb.appendChild(div);
+  });
+  fails.forEach(function(f) {
+    if (shown >= WARN_CAP) return;
+    shown++;
+    var div = document.createElement("div");
+    div.className = "red";
+    div.textContent = "[失败] 第 " + ((f.index || 0) + 1) + " 个书源：" + (f.error || "未知错误");
+    wb.appendChild(div);
+  });
+  if (totalLines > shown) {
+    var more = document.createElement("div");
+    more.textContent = "…其余 " + (totalLines - shown) + " 条已省略";
+    wb.appendChild(more);
+  }
+  wb.style.display = "block";
+}
+$("onlyManualWarnings").addEventListener("change", function() {
+  if (lastConversionDiagnostics) renderWarnings(lastConversionDiagnostics);
+});
+
 function runConvert(jsonText, st, wb) {
   var src;
-  try { src = JSON.parse(jsonText); } catch (e) { setStatus(st, "JSON 解析失败：" + e.message, "err"); return; }
+  src = jsonText;
   var r;
   try {
+    var options = {
+      cryptoJsSource: "",
+      forceEnableAll: $("forceEnableAll").checked,
+      forceWeight: $("forceWeight").checked,
+      defaultWeight: Math.max(1, Number($("defaultWeight").value) || 100)
+    };
     if (typeof window.ConverterLib.convertAll === "function") {
-      r = window.ConverterLib.convertAll(src, { cryptoJsSource: "" });
+      r = window.ConverterLib.convertAll(src, options);
     } else {
-      r = window.ConverterLib.convert(src, { cryptoJsSource: "" });
+      r = window.ConverterLib.convert(src, options);
       r.failures = []; r.count = 1; r.okCount = r.output ? 1 : 0;
     }
   } catch (e) { setStatus(st, "转换异常：" + e.message, "err"); return; }
@@ -388,44 +744,10 @@ function runConvert(jsonText, st, wb) {
     return;
   }
 
-  // 提示渲染（需人工项标红；批量带 [书源名] 前缀；超量截断）
-  wb.innerHTML = "";
   var warns = r.warnings || [];
   var fails = r.failures || [];
-  var totalLines = warns.length + fails.length;
-  if (totalLines) {
-    var title = document.createElement("div");
-    title.innerHTML = "<b>转换提示（" + totalLines + " 条）</b>";
-    wb.appendChild(title);
-    var shown = 0;
-    warns.forEach(function (w) {
-      if (shown >= WARN_CAP) return;
-      shown++;
-      var div = document.createElement("div");
-      var line = "[" + (w.level || "") + "]"
-          + (w.source ? "[" + w.source + "]" : "")
-          + (w.module ? "[" + w.module + "] " : "") + (w.msg || "");
-      div.textContent = line;
-      if (isManual(w)) div.className = "red";
-      wb.appendChild(div);
-    });
-    fails.forEach(function (f) {
-      if (shown >= WARN_CAP) return;
-      shown++;
-      var div = document.createElement("div");
-      div.className = "red";
-      div.textContent = "[失败] 第 " + ((f.index || 0) + 1) + " 个书源：" + (f.error || "未知错误");
-      wb.appendChild(div);
-    });
-    if (totalLines > shown) {
-      var more = document.createElement("div");
-      more.textContent = "…其余 " + (totalLines - shown) + " 条已省略";
-      wb.appendChild(more);
-    }
-    wb.style.display = "block";
-  } else {
-    wb.style.display = "none";
-  }
+  lastConversionDiagnostics = r;
+  renderWarnings(r);
 
   var pretty = JSON.stringify(r.output, null, 2);
   lastFullJson = pretty;
@@ -445,6 +767,7 @@ function runConvert(jsonText, st, wb) {
   }
   setStatus(st, statText, fails.length ? "" : "ok");
   ["copyBtn", "dlJsonBtn", "dlXbsBtn"].forEach(function (id) { $(id).disabled = false; });
+  if(window.BooksourceDomainCheck)window.BooksourceDomainCheck.schedule(r.output,src);
 }
 function copyOut() {
   var t = $("output").value;
@@ -514,13 +837,15 @@ $("xbsFile").addEventListener("change", function (ev) {
       var json = xbs2json(bytes);
       var pretty = JSON.stringify(JSON.parse(json), null, 2);
       $("output").value = pretty;
+      $("xbsOutput").value = pretty;
+      lastFullJson = pretty;
       var keys = {};
       try { keys = JSON.parse(json); } catch (ignored) {}
       var name = Object.keys(keys)[0] || f.name.replace(/\.xbs$/i, "");
       lastOutputName = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, "_");
-      ["copyBtn", "dlJsonBtn", "dlXbsBtn"].forEach(function (id) { $(id).disabled = false; });
-      setStatus($("xbsStatus"), "解密成功：" + f.name + "（" + bytes.length + " 字节 → " + json.length + " 字符），结果已放入下方输出框", "ok");
-      document.querySelector("#output").scrollIntoView({ behavior: "smooth", block: "center" });
+      ["copyBtn", "dlJsonBtn", "dlXbsBtn", "xbsCopyBtn", "xbsJsonBtn"].forEach(function (id) { $(id).disabled = false; });
+      setStatus($("xbsStatus"), "解密成功：" + f.name + "（" + bytes.length + " 字节 → " + json.length + " 字符），结果如下，可复制或下载 JSON", "ok");
+      $("xbsOutput").scrollIntoView({ behavior: "smooth", block: "center" });
     } catch (e) {
       setStatus($("xbsStatus"), "解密失败：" + e.message, "err");
     }
@@ -530,6 +855,8 @@ $("xbsFile").addEventListener("change", function (ev) {
 });
 function clearXbs() {
   setStatus($("xbsStatus"), "");
+  $("xbsOutput").value = "";
+  ["xbsCopyBtn", "xbsJsonBtn"].forEach(function(id) { $(id).disabled = true; });
 }
 
 /* ---------------- 书源可用性检测 ---------------- */
@@ -777,7 +1104,28 @@ function chkExport(fixOnly){
     var latest = list[0];
     var seen = null;
     try { seen = localStorage.getItem(KEY); } catch (e) {}
-    if (seen === latest.version) return;
+    // The update history is a normal panel: it remains readable after dismissal.
+    if ($("updateLoading")) $("updateLoading").style.display = "none";
+    var history = $("updateHistory");
+    if (history) {
+      history.innerHTML = "";
+      list.forEach(function(release) {
+        var item = document.createElement("div");
+        item.className = "release-item";
+        var heading = document.createElement("strong");
+        heading.textContent = "v" + String(release.version || "") + (release.title ? " · " + release.title : "");
+        var date = document.createElement("time");
+        date.textContent = release.date || "";
+        item.appendChild(heading);
+        item.appendChild(date);
+        var ul2 = document.createElement("ul");
+        (release.items || []).forEach(function(entry) {
+          var li2 = document.createElement("li"); li2.textContent = entry; ul2.appendChild(li2);
+        });
+        item.appendChild(ul2);
+        history.appendChild(item);
+      });
+    }
     $("upTitle").textContent = "🚀 更新到 v" + latest.version + (latest.title ? " · " + latest.title : "");
     $("upDate").textContent = latest.date || "";
     var ul = $("upItems");
@@ -795,13 +1143,82 @@ function chkExport(fixOnly){
   }).catch(function () { /* updates.json 不存在或离线：静默 */ });
 })();
 </script>
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-30M6LZ174J"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
 
-  gtag('config', 'G-30M6LZ174J');
+
+
+<script>
+/* ----- Side navigation: visual layout only, original business logic untouched ----- */
+(function(){
+  "use strict";
+  var names = {convert:"书源转换",check:"可用性检测",xbs:"XBS 文件工具",downloads:"最新整合包",guide:"使用说明",updates:"更新日志"};
+  function toggleSidebar(open){
+    document.body.classList.toggle("sidebar-open", !!open);
+    var trigger=document.getElementById("menuTrigger");
+    if(trigger)trigger.setAttribute("aria-expanded",open?"true":"false");
+  }
+  function showPanel(name){
+    if(!Object.prototype.hasOwnProperty.call(names,name))name="convert";
+    document.querySelectorAll("[data-panel-section]").forEach(function(section){
+      var active=section.getAttribute("data-panel-section")===name;
+      section.hidden=!active;
+      section.classList.toggle("is-active",active);
+    });
+    document.querySelectorAll(".sidebar-nav [data-panel]").forEach(function(button){
+      var active=button.getAttribute("data-panel")===name;
+      button.classList.toggle("is-active",active);
+      if(active)button.setAttribute("aria-current","page");
+      else button.removeAttribute("aria-current");
+    });
+    var title=document.getElementById("topbarTitle");
+    if(title)title.textContent=names[name];
+    document.title=names[name]+" · 香色闺阁书源";
+    toggleSidebar(false);
+    if(document.scrollingElement)document.scrollingElement.scrollTop=0;
+  }
+  window.navigateToPanel=function(name){
+    if(!Object.prototype.hasOwnProperty.call(names,name))return;
+    if(location.hash!=="#"+name)location.hash=name;
+    showPanel(name);
+  };
+  document.querySelectorAll(".sidebar-nav [data-panel]").forEach(function(button){
+    button.addEventListener("click",function(){window.navigateToPanel(button.getAttribute("data-panel"));});
+  });
+  var brand=document.querySelector(".sidebar-brand");
+  if(brand)brand.addEventListener("click",function(ev){ev.preventDefault();window.navigateToPanel("convert");});
+  var menu=document.getElementById("menuTrigger");
+  if(menu)menu.addEventListener("click",function(){toggleSidebar(!document.body.classList.contains("sidebar-open"));});
+  var backdrop=document.getElementById("sidebarBackdrop");
+  if(backdrop)backdrop.addEventListener("click",function(){toggleSidebar(false);});
+  document.addEventListener("keydown",function(ev){if(ev.key==="Escape")toggleSidebar(false);});
+  window.addEventListener("hashchange",function(){showPanel(location.hash.slice(1));});
+  showPanel(location.hash.slice(1));
+})();
+function copyXbsText(){
+  var t=document.getElementById("xbsOutput").value;
+  if(!t)return;
+  var status=document.getElementById("xbsStatus");
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(function(){setStatus(status,"JSON 已复制到剪贴板","ok");},function(){
+      var ta=document.getElementById("xbsOutput");ta.removeAttribute("readonly");ta.select();
+      document.execCommand("copy");ta.setAttribute("readonly","readonly");
+      setStatus(status,"JSON 已复制到剪贴板","ok");
+    });
+  }else{
+    var ta=document.getElementById("xbsOutput");ta.removeAttribute("readonly");ta.select();
+    document.execCommand("copy");ta.setAttribute("readonly","readonly");
+    setStatus(status,"JSON 已复制到剪贴板","ok");
+  }
+}
+function downloadXbsText(){
+  var t=document.getElementById("xbsOutput").value;
+  if(!t)return;
+  downloadBlob(t,(lastOutputName||"booksource")+".json","application/json");
+  setStatus(document.getElementById("xbsStatus"),"JSON 已下载","ok");
+}
 </script>
+
+<script src="./ai-assistant.js" defer></script>
+<script src="./ai-web-probe.js" defer></script>
+<script src="./domain-check.js" defer></script>
 </body>
 </html>

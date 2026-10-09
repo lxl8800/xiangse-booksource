@@ -1,0 +1,61 @@
+{
+  "name": "🎉 柠檬小说",
+  "verified": false,
+  "diagnostics": [
+    "未取得成功的搜索→详情→目录→正文 HTTP 证据，不自动修改 XPath 或凭空假设网页结构"
+  ],
+  "liveWebEvidence": {
+    "sourceName": "🎉 柠檬小说",
+    "site": "https://search.lemonyd.com",
+    "keyword": "青春",
+    "verifiedAt": "2026-10-09T08:38:55.076Z",
+    "steps": [
+      {
+        "step": "homepage",
+        "url": "https://search.lemonyd.com/",
+        "elapsedMs": 7801,
+        "status": "timeout",
+        "reason": "连接超过 7800ms"
+      },
+      {
+        "step": "search",
+        "url": "https://search.lemonyd.com/m/book/search?queryString=%E9%9D%92%E6%98%A5&page=1&size=10",
+        "elapsedMs": 7801,
+        "status": "timeout",
+        "reason": "连接超过 7800ms",
+        "searchAttempts": [
+          {
+            "url": "https://search.lemonyd.com/m/book/search?queryString=%E9%9D%92%E6%98%A5&page=1&size=10",
+            "httpStatus": null,
+            "status": "timeout",
+            "bytes": 0,
+            "elapsedMs": 7801,
+            "reason": "连接超过 7800ms",
+            "redirects": []
+          }
+        ]
+      },
+      {
+        "step": "detail",
+        "status": "skipped",
+        "reason": "搜索网页未取得，不能推断后续步骤有效"
+      },
+      {
+        "step": "chapterList",
+        "status": "skipped",
+        "reason": "搜索网页未取得，不能推断后续步骤有效"
+      },
+      {
+        "step": "chapterContent",
+        "status": "skipped",
+        "reason": "搜索网页未取得，不能推断后续步骤有效"
+      }
+    ],
+    "diagnostics": [
+      "真实 HTTP 访问超时：属于站点或网络可达性问题，不能靠修改 XPath 证明书源已经修复"
+    ],
+    "fullyVerified": false,
+    "depth": "live-static-dom"
+  },
+  "reason": "网页不可达；不允许凭空生成修复结果"
+}

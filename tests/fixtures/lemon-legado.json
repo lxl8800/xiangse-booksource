@@ -1,0 +1,49 @@
+[
+  {
+    "bookSourceComment": "//黑岩小说",
+    "bookSourceGroup": "一程",
+    "bookSourceName": "🎉 柠檬小说",
+    "bookSourceType": 0,
+    "bookSourceUrl": "https://search.lemonyd.com",
+    "customOrder": -88903126,
+    "enabled": true,
+    "enabledCookieJar": true,
+    "enabledExplore": true,
+    "enabledReview": true,
+    "exploreUrl": "[{\"title\":\"男生\",\"url\":\"\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":1}},{\"title\":\"现代都市\",\"url\":\"/m/book/list?sort=1&words=-1&order=0&size=20&page={{page}}&channel=5&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"玄幻修真\",\"url\":\"/m/book/list?sort=2&words=-1&order=0&size=20&page={{page}}&channel=5&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"武侠仙侠\",\"url\":\"/m/book/list?sort=3&words=-1&order=0&size=20&page={{page}}&channel=5&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"历史军事\",\"url\":\"/m/book/list?sort=4&words=-1&order=0&size=20&page={{page}}&channel=5&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"科幻末日\",\"url\":\"/m/book/list?sort=5&words=-1&order=0&size=20&page={{page}}&channel=5&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"游戏竞技\",\"url\":\"/m/book/list?sort=7&words=-1&order=0&size=20&page={{page}}&channel=5&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"女生\",\"url\":\"\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":1}},{\"title\":\"现代言情\",\"url\":\"/m/book/list?sort=101&words=-1&order=0&size=20&page={{page}}&channel=6&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"古代言情\",\"url\":\"/m/book/list?sort=102&words=-1&order=0&size=20&page={{page}}&channel=6&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"幻想言情\",\"url\":\"/m/book/list?sort=103&words=-1&order=0&size=20&page={{page}}&channel=6&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"浪漫青春\",\"url\":\"/m/book/list?sort=104&words=-1&order=0&size=20&page={{page}}&channel=6&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"短篇小说\",\"url\":\"/m/book/list?sort=107&words=-1&order=0&size=20&page={{page}}&channel=6&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"其他小说\",\"url\":\"/m/book/list?sort=9&words=-1&order=0&size=20&page={{page}}&channel=6&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"图书\",\"url\":\"\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":1}},{\"title\":\"阅读强国\",\"url\":\"/m/book/list?sort=11&words=-1&order=0&size=20&page={{page}}&channel=7&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}}]",
+    "header": "",
+    "respondTime": 12040,
+    "ruleBookInfo": {
+      "init": ""
+    },
+    "ruleContent": {
+      "content": ".con-wra@p@html"
+    },
+    "ruleExplore": {
+      "bookList": ""
+    },
+    "ruleReview": {},
+    "ruleSearch": {
+      "author": "$.authorname##<span style=\"color:red\">|</span>",
+      "bookList": "$..content[*]",
+      "bookUrl": "https://biz.lemonyd.com/book/chapter/book/{{$.id}}?volumeIndex=0",
+      "checkKeyWord": "青春",
+      "coverUrl": "$.iconUrlSmall",
+      "intro": "🏷️   {{$.tags&&}}{{'\\n'+'​'}}\\n{{$.introduce}}##(^|[。！？]+[”」）】]?)##$1<br>",
+      "kind": "$.groupName&&$.updatetime##\\s..:.*",
+      "lastChapter": "$.lastchaptername",
+      "name": "$.name##<span style=\"color:red\">|</span>|\\（.*|\\(.*",
+      "wordCount": "$.words"
+    },
+    "ruleToc": {
+      "chapterList": "$..rf[*]",
+      "chapterName": "$.name",
+      "chapterUrl": "$.chapterId@js:\nid=baseUrl.match(/(\\d+)/)[1];result='https://m.lemonyd.com/chapter/'+id+'/'+result+'?smss=true'+',{\"webView\": true}'",
+      "nextTocUrl": "https://biz.lemonyd.com/book/chapter/book/{{$..id}}?volumeIndex={{$..current}}",
+      "updateTime": "{{$.publishDate}} · {{$.words}}字"
+    },
+    "searchUrl": "/m/book/search?queryString={{key}}&page={{page}}&size=10",
+    "weight": 0,
+    "lastUpdateTime": 1667034108858
+  }
+]

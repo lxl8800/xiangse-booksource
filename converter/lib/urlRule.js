@@ -19,9 +19,7 @@ var CHARSET_MAP = {
   "utf-8": "",
   "utf8": "",
   "gbk": "2147485234",
-  "gb2312": "2147485232",
-  "gb18030": "2147485232",
-  "big5": "2147485232"
+  "gb2312": "2147485232"
 };
 
 // 匹配 {{...}}，返回 [{expr, start, end}]
@@ -76,11 +74,16 @@ function exprToJs(expr, ctx) {
         continue;
       }
     }
+    if(e[i]==='"'||e[i]==="'"){
+      var quote=e[i],end=i+1;
+      while(end<n){if(e[end]==='\\'){end+=2;continue;}if(e[end++]===quote)break;}
+      out+=e.slice(i,end);i=end;continue;
+    }
     // key / page 变量（词边界）
     var m = e.slice(i).match(/^[a-zA-Z_$][\w$]*/);
     if (m) {
       var w = m[0];
-      var prevOk = i === 0 || !/[a-zA-Z0-9_$]/.test(e[i - 1]);
+      var prevOk = i === 0 || !/[a-zA-Z0-9_$.]/.test(e[i - 1]);
       if (prevOk && w === "key") { out += "params.keyWord"; i += w.length; continue; }
       if (prevOk && w === "page") { out += "params.pageIndex"; i += w.length; continue; }
       if (prevOk && w === "baseUrl") {
@@ -197,12 +200,13 @@ function bodyToParams(body, ctx) {
 // 拆分 url,{options}（options 必须是合法 JSON）
 // 返回 {url, options} 或 {url}（无选项）
 function splitUrlOptions(urlRule) {
-  var i = urlRule.indexOf(",{");
+  var match = /,\s*\{(?!\{)/.exec(urlRule);
+  var i = match ? match.index : -1;
   if (i === -1) return { url: urlRule };
   // 找匹配的右花括号
   var depth = 1;
   var quote = null;
-  var j = i + 2;
+  var j = urlRule.indexOf("{", i) + 1;
   var n = urlRule.length;
   while (j < n) {
     var c = urlRule[j];
@@ -220,13 +224,13 @@ function splitUrlOptions(urlRule) {
     }
     j++;
   }
-  if (depth !== 0) return { url: urlRule };
+  if (depth !== 0) return { url: urlRule.slice(0,i), error: "请求选项 JSON 未闭合" };
   var optStr = urlRule.slice(i + 1, j + 1);
   try {
     var options = JSON.parse(optStr);
     return { url: urlRule.slice(0, i), options: options };
   } catch (e) {
-    return { url: urlRule };
+    return { url: urlRule.slice(0,i), error: "请求选项不是合法 JSON" };
   }
 }
 
@@ -243,6 +247,9 @@ function buildRequestInfo(urlRule, ctx, role) {
   var url = split.url.trim();
   var options = split.options || null;
   var notes = [];
+  if (split.error) warnings.push({level:"unsupported",msg:split.error});
+  if (options && options.method && !/^(GET|POST)$/i.test(String(options.method))) warnings.push({level:"unsupported",msg:"无法等价映射 HTTP 方法 " + options.method});
+  if (options && options.webView) warnings.push({level:"degraded",msg:"WebView 已保留请求标记，动态执行与嗅探需要 App 实测；静态验证不支持"});
 
   var urlStr = url;
   // 预处理 <,{{expr}}> 可选前缀 → 条件表达式占位（须在绝对化之前，避免 <> 被编码）
@@ -272,7 +279,7 @@ function buildRequestInfo(urlRule, ctx, role) {
   if (options && options.charset) {
     var enc = CHARSET_MAP[String(options.charset).toLowerCase()];
     if (enc !== undefined) {
-      if (enc !== "") actionExtra.responseEncode = enc;
+      if (enc !== "") { actionExtra.responseEncode = enc; actionExtra.requestParamsEncode = enc; }
     } else {
       warnings.push({ level: "degraded", msg: "charset=" + options.charset + " 无对应 responseEncode，已忽略（站点若为非 UTF-8 需人工处理）" });
     }
@@ -286,10 +293,11 @@ function buildRequestInfo(urlRule, ctx, role) {
     warnings.push({ level: "note", msg: "enabledCookieJar=false → 请求已写入 forbidCookie: true（不携带 Cookie）" });
   }
 
-  if (options && options.method && String(options.method).toUpperCase() === "POST" && options.body) {
+  if (options && options.method && String(options.method).toUpperCase() === "POST") {
     // POST 情形 → @js: 脚本
-    var bp = bodyToParams(String(options.body), ctx);
+    var bp = bodyToParams(String(options.body == null ? "" : options.body), ctx);
     notes = notes.concat(bp.notes);
+    if (options.body && (typeof options.body !== "string" || /^\s*[\[{]/.test(options.body))) warnings.push({level:"unsupported",msg:"JSON/对象 POST body 无法等价转换为表单 httpParams，需专用请求适配"});
     if (bp.needsCrypto) needsCrypto = true;
     var tplLit = jsUrlTemplate(urlStr, tpls, optMaps, xctx, notes);
     if (tplLit.needsCrypto) needsCrypto = true;

@@ -138,7 +138,9 @@ function ensureReturn(code) {
         var candSingle = "return (" + expr + ");";
         if (jsSyntaxOk(candSingle)) return candSingle;
       }
-      var cand1 = c + "\nreturn (" + expr + ");";
+      var lastIndex=lines.length-1;
+      while(lastIndex>=0&&!stripLineComment(lines[lastIndex]).trim())lastIndex--;
+      var cand1 = lines.slice(0,lastIndex).join("\n") + "\nreturn (" + expr + ");";
       if (jsSyntaxOk(cand1)) return cand1;
     }
   }
@@ -163,7 +165,7 @@ function expandTemplate(body, ctx, warnings) {
   // 整条 = 单个占位符
   if (parts.length === 1 && parts[0].t === "ph") {
     var inner = parts[0].v;
-    if (!/^(@@|@|@XPath:|@css:|@json:|\/\/|\$)/.test(inner)) {
+    if (!/^(@@|@|@xpath:|@css:|@json:|\/\/|\$)/.test(inner)) {
       // 纯 JS 表达式占位符 → @js: 块
       var tr = jsRule.translateJs(inner, ctx);
       warnings.push.apply(warnings, tr.notes.map(function (n) { return { level: "degraded", msg: n }; }));
@@ -206,7 +208,7 @@ function expandTemplate(body, ctx, warnings) {
     if (parts[i].t === "text") { conv.push(parts[i]); continue; }
     phCount++;
     var inner2 = parts[i].v;
-    if (!/^(@@|@|@XPath:|@css:|@json:|\/\/|\$)/.test(inner2)) {
+    if (!/^(@@|@|@xpath:|@css:|@json:|\/\/|\$)/.test(inner2)) {
       warnings.push({ level: "unsupported", msg: "无前缀 JS 占位符与文本混合（" + body + "）无法自动改写，需人工处理（等价形态：选择器||@js:）" });
       return null;
     }
@@ -316,10 +318,10 @@ function parseTemplate(body) {
 /** 占位符内容 → {type:'xp'|'json', v}；JS 表达式/不可识别返回 null。 */
 function convertPlaceholder(inner, ctx, warnings) {
   // Legado 实际兼容单 @ 前缀（{{@class.x}} ≡ {{@@class.x}}）；已知专用前缀优先
-  if (/^@(?!@|xpath:|css:|json:)/.test(inner)) {
+  if (/^@(?!@|xpath:|css:|json:)/i.test(inner)) {
     return convertPlaceholder("@" + inner, ctx, warnings);
   }
-  if (inner.indexOf("@@") === 0 || /^@(?!@|xpath:|css:|json:)/.test(inner)) {
+  if (inner.indexOf("@@") === 0 || /^@(?!@|xpath:|css:|json:)/i.test(inner)) {
     var subInner = inner.indexOf("@@") === 0 ? inner.slice(2) : inner.slice(1);
     var r = convertOne(subInner, ctx);
     warnings.push.apply(warnings, r.warnings);
@@ -327,7 +329,7 @@ function convertPlaceholder(inner, ctx, warnings) {
     if (!v || v.indexOf("@js:") !== -1 || v.indexOf("\n") !== -1 || v.indexOf(" || ") !== -1) return null;
     return { type: "xp", v: v };
   }
-  if (inner.indexOf("@XPath:") === 0) return { type: "xp", v: inner.slice(7).trim() };
+  if (/^@xpath:/i.test(inner)) return { type: "xp", v: inner.slice(7).trim() };
   if (inner.indexOf("//") === 0) return { type: "xp", v: inner };
   if (inner.indexOf("@css:") === 0) {
     var c = cssRule.convertCss(inner, ctx);
@@ -425,9 +427,9 @@ function convertOne(rule, ctx) {
     var r = cssRule.convertCss(body, ctx);
     if (r.error) { warnings.push({ level: "unsupported", msg: r.error + "（原文：" + body + "）" }); xpath = body; }
     else { xpath = r.xpath; bodyW = r.notes; }
-  } else if (body.indexOf("@XPath:") === 0) {
+  } else if (/^@xpath:/i.test(body)) {
     xpath = body.slice(7);
-  } else if (body.indexOf("//") === 0) {
+  } else if (/^(?:\/|\.\/)/.test(body)) {
     xpath = body;
   } else if (body.indexOf("@json:") === 0 || body[0] === "$") {
     var jp = body.indexOf("@json:") === 0 ? body.slice(6) : body;
@@ -455,6 +457,18 @@ function convertOne(rule, ctx) {
              body.indexOf("@cookie:") === 0) {
     warnings.push({ level: "unsupported", msg: "变量操作规则（" + body + "）不支持，已保留原样" });
     xpath = body;
+  } else if ((ctx.field === "bookList" || ctx.field === "chapterList") &&
+             body.indexOf("@") === -1 &&
+             (/^[a-zA-Z][\w-]*[.#][\w-]+/.test(body) || /^[a-zA-Z][\w-]*\s+[a-zA-Z][\w-]*/.test(body))) {
+    // Default would turn bare CSS into an attribute (/@a.foo or /@ol li).
+    var bareCss = cssRule.convertCss("@css:" + body, ctx);
+    if (bareCss.error) {
+      warnings.push({ level: "unsupported", msg: bareCss.error + "（原文：" + body + "）" });
+      xpath = body;
+    } else {
+      xpath = bareCss.xpath;
+      bodyW = bareCss.notes;
+    }
   } else if (ctx.jsonEnabled && /^[a-zA-Z_$][\w$.\[\]]*$/.test(body)) {
     // JSON 源裸词 = 相对 JSON 键（如 author/cover/abstract），直接透传
     xpath = body;
@@ -578,6 +592,7 @@ function convertRule(rule, ctx) {
     warnings.push({ level: "unsupported", msg: "%% 依次取数规则不支持，已保留原样，需人工处理" });
     return { value: original, warnings: warnings };
   }
+  if (/^@js:/i.test(rule) || findTopLevelJs(rule) > 0) return convertOne(rule, ctx);
   var hasAnd = utils.splitTopLevel(rule, ["&&"]).length > 1;
   var hasOr = utils.splitTopLevel(rule, ["||"]).length > 1;
   if (hasAnd && hasOr) {

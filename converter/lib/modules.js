@@ -31,7 +31,7 @@ function anyJson(obj) {
   return false;
 }
 function jsonNote(warnings) {
-  warnings.push({ level: "note", msg: "检测到 JSONPath 规则，已启用 JSON 解析（parserID=JSON，responseFormatType=json），JSONPath 直接透传" });
+  warnings.push({ level: "note", msg: "检测到 JSONPath 规则：parserID=DOM，responseFormatType=json（香色 2.56.1 兼容），JSONPath 直接透传" });
 }
 
 function base(moduleName, host, jsonEnabled) {
@@ -43,14 +43,66 @@ function base(moduleName, host, jsonEnabled) {
     responseFormatType: "html"
   };
   if (jsonEnabled) {
-    m.parserID = "JSON";
     m.responseFormatType = "json";
+  }
+  // Explicit URL handoff is mandatory in 2.56.1's 4 core actions.
+  if (moduleName === "bookDetail" || moduleName === "chapterList" || moduleName === "chapterContent") {
+    m.requestInfo = "%@result";
   }
   return m;
 }
 
 // 按映射挑选存在且非空的字段并转换
 // mapping: [[legadoKey, xsggKey, {optional:true}], ...]
+// Portable JS helpers from Legado jsLib: inline only direct named function
+// declarations that the output actually references. Code is never evaluated
+// during conversion, and obvious external globals are rejected with warnings.
+function extractHelper(jsLib, name) {
+  if (!/^[A-Za-z_$][\w$]*$/.test(name)) return null;
+  var source=String(jsLib||'');
+  if (!source || source.length>12000) return null;
+  var re=new RegExp('\\bfunction\\s+'+name+'\\s*\\(');
+  var start=re.exec(source);
+  if(!start)return null;
+  var brace=source.indexOf('{',start.index);
+  if(brace<0 || brace-start.index>240) return null;
+  var depth=1,q='',end=-1;
+  for(var i=brace+1;i<source.length;i++){
+    var ch=source[i];
+    if(q){if(ch==='\\'){i++;continue;}if(ch===q)q='';continue;}
+    if(ch==='"'||ch==="'"||ch==='`'){q=ch;continue;}
+    if(ch==='{')depth++;else if(ch==='}'&&--depth===0){end=i+1;break;}
+  }
+  if(end<0)return null;
+  var body=source.slice(start.index,end);
+  if(body.length>2200 || /\b(java|eval|fetch|XMLHttpRequest|document|window|require|import)\b/.test(body))return null;
+  return body;
+}
+function embedPortableHelpers(value,ctx,warnings) {
+  if(typeof value!=='string' || !(ctx.src && ctx.src.jsLib) || value.indexOf('@js:')<0)return value;
+  var sep=value.indexOf('@js:');
+  var body=value.slice(sep+4);
+  var lib=String(ctx.src.jsLib);
+  var declared=lib.match(/\bfunction\s+[A-Za-z_$][\w$]*\s*\(/g)||[];
+  var helpers=[],names=declared.map(function(d){return d.replace(/^.*?function\s+/,'').replace(/\s*\($/,'');}),seen={};
+  function called(code,name){var escaped=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');return new RegExp('(?:^|[^\\w$])'+escaped+'\\s*\\(').test(code);}
+  function add(name){
+    if(Object.prototype.hasOwnProperty.call(seen,name))return;
+    seen[name]=true;
+    var definition=extractHelper(lib,name);
+    if(!definition){warnings.push({level:'unsupported',msg:'jsLib 辅助函数 '+name+' 无法安全内联，保留诊断，不能认定为等价转换'});return;}
+    try{new Function(definition);}catch(e){warnings.push({level:'unsupported',msg:'jsLib 辅助函数 '+name+' 的静态语法检查失败'});return;}
+    names.forEach(function(dep){if(dep!==name&&called(definition,dep))add(dep);});
+    helpers.push(definition);
+  }
+  names.forEach(function(name){if(called(body,name)&&!new RegExp('function\\s+'+name+'\\s*\\(').test(body))add(name);});
+  if(helpers.length){
+    warnings.push({level:'note',msg:'已将 jsLib 中 '+helpers.length+' 个实际使用的辅助函数内联到字段脚本，不再依赖 Legado 全局 jsLib'});
+    return value.slice(0,sep+4)+'\n'+helpers.join('\n')+'\n'+body;
+  }
+  return value;
+}
+
 function pickFields(src, mapping, ctx) {
   var out = {};
   var warnings = [];
@@ -70,9 +122,23 @@ function pickFields(src, mapping, ctx) {
     var fctx = {};
     for (var fk in ctx) fctx[fk] = ctx[fk];
     fctx.field = legadoKey;
+    if (legadoKey === "bookList" || legadoKey === "chapterList") fctx.listChildFields = false;
     var r = rules.convertRule(String(raw), fctx);
     if (r.value === "") continue;
-    out[xsggKey] = r.value;
+    var convertedValue = r.value;
+    if (ctx.listChildFields && (xsggKey === "url" || xsggKey === "detailUrl" || xsggKey === "title")) {
+      if (convertedValue === "/@href" || convertedValue === "./@href") convertedValue = "//@href";
+      if (convertedValue === "//a/@href" && ctx.listItemIsAnchor) convertedValue = "//@href";
+      if (convertedValue === "/text()" || convertedValue === "./text()") convertedValue = "//text()";
+    }
+    if (ctx.listChildFields && (xsggKey === "url" || xsggKey === "detailUrl") && (String(raw).trim() === "href" || (ctx.listItemIsAnchor && /^(?:a@href|tag\.a@href)$/.test(String(raw).trim())))) {
+      convertedValue = "//@href";
+    }
+    if(ctx.listChildFields && xsggKey==='detailUrl' && typeof convertedValue==='string' && /\/@href$/.test(convertedValue) && convertedValue.indexOf('@js:')<0){
+      convertedValue='('+convertedValue+')[1]';
+      warnings.push({level:'degraded',msg:'列表详情 URL 为单值字段，已限制首个匹配 href 防止拼接多条地址；所选链接仍需网页与 App 验证'});
+    }
+    out[xsggKey] = embedPortableHelpers(convertedValue,fctx,warnings);
     warnings = warnings.concat(r.warnings);
     // html/all 结尾字段 → 注册 removeHtmlKeys（XSGG 原生剥标签去 script）
     if (endsWithHtmlOp(String(raw))) htmlKeys.push(xsggKey);
@@ -110,7 +176,9 @@ function buildSearchBook(src, ctx) {
   var ri = urlRule.buildRequestInfo(String(src.searchUrl), jctx, "search");
   warnings = warnings.concat(ri.warnings);
   var m = base("searchBook", jctx.host, jctx.jsonEnabled);
-  m.requestInfo = ri.requestInfo;
+  m.requestInfo = embedPortableHelpers(ri.requestInfo,jctx,warnings);
+  Object.assign(m, ri.actionExtra || {});
+  var searchFieldsCtx = Object.assign({}, jctx, { listChildFields: true, listItemIsAnchor: /(?:^|[@ >])(?:tag\.)?a(?:[.#\[][\w\W]*)?$/.test(String(rs.bookList || "")) });
   var p = pickFields(rs, [
     ["bookList", "list"],
     ["name", "bookName"],
@@ -121,7 +189,7 @@ function buildSearchBook(src, ctx) {
     ["intro", "desc", { optional: true }],
     ["wordCount", "wordCount", { optional: true }],
     ["lastChapter", "lastChapterTitle", { optional: true }]
-  ], jctx);
+  ], searchFieldsCtx);
   Object.keys(p.out).forEach(function (k) { m[k] = p.out[k]; });
   warnings = warnings.concat(p.warnings);
   applyRemoveHtmlKeys(m, p, warnings);
@@ -138,15 +206,15 @@ function buildSearchBook(src, ctx) {
 function buildBookDetail(src, ctx) {
   var warnings = [];
   if (!src.ruleBookInfo || !Object.keys(src.ruleBookInfo).length) {
-    return { module: null, warnings: warnings.concat([{ level: "note", msg: "无 ruleBookInfo，跳过 bookDetail" }]) };
+    // Valid XSGG source still needs the action to propagate a selected book URL.
+    return { module: base("bookDetail", ctx.host, false), warnings: warnings.concat([{ level: "degraded", msg: "无 ruleBookInfo，已生成仅透传详情 URL 的 bookDetail 动作；书籍详情字段需实际验证" }]) };
   }
   var jctx = anyJson(src.ruleBookInfo) ? jsonCtx(ctx, "$.x") : ctx;
   if (jctx.jsonEnabled) jsonNote(warnings);
   var m = base("bookDetail", jctx.host, jctx.jsonEnabled);
-  // 无 requestInfo：App 会沿用点击进入的详情页 URL
-  warnings.push({ level: "note", msg: "bookDetail 未设 requestInfo，将沿用搜索结果/分类点击进入的详情页 URL" });
+  // Keep explicit %@result instead of relying on implicit App state.
   if (src.ruleBookInfo.tocUrl) {
-    warnings.push({ level: "degraded", msg: "详情页含目录 URL 规则(tocUrl)：XSGG 目录将沿用详情页 URL 解析；若目录页与详情页不同，请为 chapterList 手动配置 requestInfo" });
+    warnings.push({ level: "unsupported", msg: "详情页含独立目录 tocUrl，当前引擎尚未证明等价传递；不得把沿用详情 URL 的输出认定为可用，需真实目录证据" });
   }
   var p = pickFields(src.ruleBookInfo, [
     ["name", "bookName"],
@@ -163,6 +231,35 @@ function buildBookDetail(src, ctx) {
   return { module: m, warnings: warnings };
 }
 
+// A relative href must be resolved against the actual response page, not the site's homepage.
+// Only augment plain XPath attribute extraction, never override a custom Legado JS rule.
+function absolutizeHref(value, host) {
+  if (typeof value !== "string" || !/\/@href\s*$/.test(value) || value.indexOf("||@js:") >= 0 || value.indexOf("@js:") === 0) return value;
+  // iOS JavaScriptCore does not guarantee a global URL constructor.
+  // Use plain ECMAScript string operations to preserve XSGG compatibility.
+  return value + "||@js:\n" + [
+    "var u=String(result==null?'':result).trim();",
+    "if(!u)return '';",
+    "if(/^(https?:|data:|blob:)/i.test(u))return u;",
+    "var b=String((typeof params!=='undefined'&&params.responseUrl)||(typeof config!=='undefined'&&config.host)||'').replace(/[?#].*$/,'');",
+    "var m=b.match(/^(https?):\\/\\/[^/]+/i);if(!m)return u;",
+    "var origin=m[0];if(b===origin)b+='/';",
+    "if(u.slice(0,2)==='//')return m[1]+':'+u;",
+    "if(u.charAt(0)==='?')return b+u;",
+    "if(u.charAt(0)==='#')return b+u;",
+    "var suffix=u.match(/[?#].*$/),tail=suffix?suffix[0]:'';u=u.replace(/[?#].*$/,'');",
+    "var path=u.charAt(0)==='/'?u:b.slice(origin.length).replace(/\\/[^/]*$/,'/')+u;",
+    "var parts=path.split('/'),stack=[];",
+    "for(var i=0;i<parts.length;i++){",
+    "if(parts[i]==='..'){if(stack.length>1)stack.pop();}",
+    "else if(parts[i]==='.'||parts[i]===''){if(i===0)stack.push('');}",
+    "else stack.push(parts[i]);",
+    "}",
+    "var normalized=stack.join('/');if(path.slice(-1)==='/'&&normalized.slice(-1)!=='/')normalized+='/';",
+    "return origin+normalized+(typeof tail!=='undefined'?tail:'');"
+  ].join("\n");
+}
+
 // chapterList
 function buildChapterList(src, ctx) {
   var warnings = [];
@@ -172,18 +269,22 @@ function buildChapterList(src, ctx) {
   var jctx = jsonCtx(ctx, src.ruleToc.chapterList);
   if (jctx.jsonEnabled) jsonNote(warnings);
   var m = base("chapterList", jctx.host, jctx.jsonEnabled);
-  // 无 requestInfo：沿用 bookDetail 页 URL（Legado 的目录解析即在详情页进行）
-  warnings.push({ level: "note", msg: "chapterList 未设 requestInfo，将沿用 bookDetail 页 URL 解析目录" });
+  // Always propagate upstream detail URL using the documented %@result placeholder.
+  var chapterFieldsCtx = Object.assign({}, jctx, { listChildFields: true, listItemIsAnchor: /(?:^|[@ >])(?:tag\.)?a(?:[.#\[][\w\W]*)?$/.test(String(src.ruleToc.chapterList || "")) });
   var p = pickFields(src.ruleToc, [
     ["chapterList", "list"],
     ["chapterName", "title"],
     ["chapterUrl", "url"],
     ["nextTocUrl", "nextPageUrl", { optional: true }],
     ["updateTime", "updateTime", { optional: true }]
-  ], jctx);
+  ], chapterFieldsCtx);
   Object.keys(p.out).forEach(function (k) { m[k] = p.out[k]; });
   warnings = warnings.concat(p.warnings);
-  if (src.ruleToc.chapterUrl && /^[^\/\s]/.test(String(src.ruleToc.chapterUrl).trim())) {
+  var beforeUrl = m.url;
+  m.url = absolutizeHref(m.url, jctx.host);
+  if (m.nextPageUrl) m.nextPageUrl = absolutizeHref(m.nextPageUrl, jctx.host);
+  if (beforeUrl !== m.url) warnings.push({ level: "note", msg: "章节相对 URL 已加上 responseUrl 绝对化处理" });
+  if (src.ruleToc.chapterUrl && /^[^\/\s]/.test(String(src.ruleToc.chapterUrl).trim()) && beforeUrl === m.url) {
     warnings.push({ level: "degraded", msg: "章节 URL 规则可能产出相对路径，XSGG 需要绝对 URL，请人工确认" });
   }
   applyRemoveHtmlKeys(m, p, warnings);
@@ -197,7 +298,7 @@ function buildChapterList(src, ctx) {
   var skipN = detectSkipCount(String(src.ruleToc.chapterList || ""));
   if (skipN > 0) {
     m.moreKeys = m.moreKeys || {};
-    m.moreKeys.skipCount = skipN;
+    if (!/\[(?:!?[\d, :]+)\]|!\d/.test(String(src.ruleToc.chapterList || ""))) m.moreKeys.skipCount = skipN;
     warnings.push({ level: "note", msg: "已识别目录列表忽略头部 " + skipN + " 条 → moreKeys.skipCount" });
   }
   return { module: m, warnings: warnings };
@@ -232,14 +333,14 @@ function buildChapterContent(src, ctx) {
   var jctx = anyJson(src.ruleContent) ? jsonCtx(ctx, "$.x") : ctx;
   if (jctx.jsonEnabled) jsonNote(warnings);
   var m = base("chapterContent", jctx.host, jctx.jsonEnabled);
-  // 无 requestInfo：沿用章节列表点击的章节页 URL
-  warnings.push({ level: "note", msg: "chapterContent 未设 requestInfo，将沿用章节列表点击的章节页 URL" });
+  // Always propagate the selected chapter URL; App-specific implicit chaining is unreliable.
   var p = pickFields(src.ruleContent, [
     ["content", "content"],
     ["nextContentUrl", "nextPageUrl", { optional: true }]
   ], jctx);
   Object.keys(p.out).forEach(function (k) { m[k] = p.out[k]; });
   warnings = warnings.concat(p.warnings);
+  if (m.nextPageUrl) m.nextPageUrl = absolutizeHref(m.nextPageUrl, jctx.host);
 
   // 正文分页：nextContentUrl → nextPageUrl 已映射，maxPage 必填（规则要求）
   if (p.out.nextPageUrl) {
@@ -301,6 +402,15 @@ function safeDecode(s) {
 // 支持两种格式：每行「名称::路径」；或 JSON 数组 [{"title":"..","url":".."},...]（含 style 字段）
 function parseExploreLines(exploreUrl) {
   var s = String(exploreUrl).trim();
+  var fromJs=/^@js:/i.test(s);
+  if(/^@js:/i.test(s)){
+    // Common pattern: var inputData = `分类::/path/{{page}}...`;
+    // NEVER execute code. Extract only a literal multiline category table.
+    var m=s.match(/\b(?:var|let|const)\s+(?:inputData|categoriesText|categoryText|exploreText)\s*=\s*([`\"'])([\s\S]*?)\1\s*;/);
+    if(!m)return [];
+    s=m[2];
+    if(!s.includes('::')||s.includes('${')||s.length>20000)return [];
+  }
   if (s.charAt(0) === "[") {
     try {
       var arr = JSON.parse(s);
@@ -322,7 +432,7 @@ function parseExploreLines(exploreUrl) {
   var out = [];
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i].trim();
-    if (!line) continue;
+    if (!line || (fromJs && line.indexOf("::")===-1)) continue;
     var idx = line.indexOf("::");
     if (idx === -1) {
       out.push({ name: "分类", path: line });
@@ -437,10 +547,55 @@ function buildBookWorld(src, ctx) {
   }
   var lines = parseExploreLines(src.exploreUrl);
   if (!lines.length) {
-    return { module: null, warnings: warnings.concat([{ level: "note", msg: "exploreUrl 为空，跳过 bookWorld" }]) };
+    var jsWarning=/^@js:/i.test(String(src.exploreUrl||''));
+    return { module: null, warnings: warnings.concat([{ level:jsWarning?'unsupported':'note', msg:jsWarning
+      ?'动态 exploreUrl 不能静态提取分类；未执行网页 JavaScript，也没有把代码片段冒充分类地址'
+      :'exploreUrl 为空，跳过 bookWorld' }]) };
   }
 
-  var jctx = jsonCtx(ctx, re.bookList);
+  // Legado JavaScript commonly builds a *literal* category table before
+  // JSON.stringify. Use only the extracted table, not the source JavaScript.
+  // Generate independent bookWorld entries: no runtime filter globals or
+  // object-literal adapters that may differ in the official iOS editor.
+  if(/^@js:/i.test(String(src.exploreUrl||''))){
+    var staticCtx=Object.assign({},jsonCtx(ctx,re.bookList),{listChildFields:true});
+    var staticMap={};
+    var pp=pickFields(re,[
+      ['bookList','list'],['name','bookName'],['bookUrl','detailUrl'],
+      ['coverUrl','cover',{optional:true}],['intro','desc',{optional:true}],
+      ['author','author',{optional:true}],['kind','cat',{optional:true}],
+      ['lastChapter','lastChapterTitle',{optional:true}]
+    ],staticCtx);
+    warnings=warnings.concat(pp.warnings);
+    for(var si=0;si<Math.min(60,lines.length);si++){
+      var line=lines[si];
+      if(!line.path || !/^(https?:\/\/|\/)/i.test(line.path) ||
+        /[<>]|javascript:|\$\{|@js:/i.test(line.path)){
+        warnings.push({level:'degraded',msg:'分类 '+line.name+' 的 URL 含动态或非 HTTP 结构，未自动生成'});
+        continue;
+      }
+      var path=String(line.path).replace(/^\s+|\s+$/g,'');
+      var safeName=line.name||'分类';
+      var key=safeName, suffix=2;
+      while(Object.prototype.hasOwnProperty.call(staticMap,key))key=safeName+'('+suffix+++')';
+      var entry=base('bookWorld',ctx.host,staticCtx.jsonEnabled);
+      for(var pk in pp.out)entry[pk]=pp.out[pk];
+      var address=urlRule.buildRequestInfo(path,staticCtx,'explore');
+      if(address.requestInfo){entry.requestInfo=embedPortableHelpers(address.requestInfo,staticCtx,warnings);}
+      else {warnings.push({level:'unsupported',msg:'分类 '+key+' 缺少合法 URL，已跳过'});continue;}
+      entry._sIndex=Object.keys(staticMap).length;
+      entry.moreKeys={pageSize:20};
+      staticMap[key]=entry;
+      warnings=warnings.concat(address.warnings||[]);
+    }
+    if(Object.keys(staticMap).length){
+      warnings.push({level:'note',msg:'从 Legado JS 的文字分类表静态提取 '+Object.keys(staticMap).length+' 个书源分类，无需 AI、未执行原始代码；分页地址需实际网络验证'});
+      return {module:staticMap,warnings:warnings};
+    }
+    return {module:null,warnings:warnings.concat([{level:'unsupported',msg:'JS 分类未找到可静态转换的有效 URL'}])};
+  }
+
+  var jctx = Object.assign({},jsonCtx(ctx,re.bookList),{listChildFields:true});
   if (jctx.jsonEnabled) jsonNote(warnings);
   var m = base("bookWorld", jctx.host, jctx.jsonEnabled);
   var p = pickFields(re, [
@@ -499,7 +654,20 @@ function buildBookWorld(src, ctx) {
     em.requestInfo = ri;
     em._sIndex = entries.length;
     em.moreKeys = { pageSize: 20 };
-    if (filtersVal !== null) em.moreKeys.requestFilters = filtersVal;
+    if (filtersVal !== null) {
+      if (Array.isArray(filtersVal)) {
+        if (filtersVal.length > 1) {
+          warnings.push({ level: "degraded", msg: "多维分类筛选不能安全转换为 2.56.1 字符串过滤器，已保留首维；其余维度需单独重写" });
+        }
+        var first = filtersVal[0];
+        if (first && first.key && Array.isArray(first.items)) {
+          var flines = [String(first.key)];
+          first.items.forEach(function (it) { if (it && it.title && it.value !== undefined) flines.push(String(it.title) + "::" + String(it.value)); });
+          filtersVal = flines.join("\n");
+        } else filtersVal = null;
+      }
+      if (typeof filtersVal === "string" && filtersVal.trim()) em.moreKeys.requestFilters = filtersVal;
+    }
     entries.push({ key: eName, module: em });
     if (noteMsg) warnings.push({ level: "note", msg: noteMsg });
   }
@@ -519,6 +687,7 @@ function buildBookWorld(src, ctx) {
   for (var g2 = 0; g2 < groupOrder.length; g2++) {
     var grp = groupMap[groupOrder[g2]];
     var head = grp[0];
+    if(head.exprs.length!==1 || head.exprs[0]!=="params.pageIndex"){leftovers=leftovers.concat(grp);continue;}
     var sigOk = true;
     for (var s1 = 1; s1 < grp.length; s1++) {
       if (grp[s1].sig !== head.sig) { sigOk = false; break; }
@@ -560,6 +729,7 @@ function buildBookWorld(src, ctx) {
       }
     }
 
+    if (uniform && diffCols.length > 1) uniform = false;
     if (uniform) {
       var skelSegs = segsArr[0].slice();
       var keyNames = [];
@@ -575,7 +745,7 @@ function buildBookWorld(src, ctx) {
       }
       urlTpl = urlTpl.replace(/\{\{page\}\}/g, function () {
         pIdx++;
-        return "${" + (pgExprs[pIdx] || "params.pageIndex") + "}";
+        return "${" + (pgExprs[pIdx-1] || "params.pageIndex") + "}";
       });
       var filtersVal;
       var riHead;
@@ -586,7 +756,7 @@ function buildBookWorld(src, ctx) {
           f3 += "\n" + grp[m6].name + "::" + tokensByCol[0][m6];
         }
         filtersVal = f3;
-        riHead = "let {_type}=params.filters";
+        riHead = "var _type=String(params && params.filter || params && params.filters && params.filters._type || " + JSON.stringify(tokensByCol[0][0]) + ");";
       } else {
         // 多键：格式二数组，每列一个筛选变量（组合维度）
         var arr2 = [];
@@ -604,8 +774,9 @@ function buildBookWorld(src, ctx) {
         filtersVal = arr2;
         riHead = "let {" + keyNames.join(",") + "}=params.filters";
       }
+      if(!/^https?:\/\//i.test(urlTpl))urlTpl=ctx.host+(urlTpl.charAt(0)==='/'?'':'/')+urlTpl;
       pushEntry(null,
-          "@js:\n" + riHead + "\nlet url=`" + urlTpl + "`;\n\nreturn {url:url}",
+          "@js:\n" + riHead + "\nlet url=`" + urlTpl + "`;\n\nreturn url;",
           filtersVal,
           "分类页[" + (entries.length === 0 ? "分类" : "分类" + (entries.length + 1)) + "]：" + grp.length + " 个分类共享模板"
               + (diffCols.length > 1 ? "（多维筛选 " + keyNames.join("/") + "）" : "（_type）"));
@@ -620,7 +791,7 @@ function buildBookWorld(src, ctx) {
         warnings.push({ level: "note", msg: "分类[" + grp[m7].name + "] URL 为相对地址（" + grp[m7].base + "），将基于站点 host 拼接" });
       }
     }
-    var tplJ = "params.filters.order + \"/\"";
+    var tplJ = "String(params && params.filter || params && params.filters && params.filters.order || " + JSON.stringify(itemsJ[0].value) + ") + \"/\"";
     if (head.tail !== "") tplJ += " + \"" + utils.escStr(head.tail) + "\"";
     tplJ += " + params.pageIndex";
     if (head.post !== "") tplJ += " + \"" + utils.escStr(head.post) + "\"";
@@ -640,17 +811,17 @@ function buildBookWorld(src, ctx) {
         warnings.push({ level: "note", msg: "分类[" + leftovers[r2].name + "] URL 为相对地址，将基于站点 host 拼接" });
       }
     }
-    pushEntry("更多",
-        "@js:\nlet url = String(params.filters.order).replace(/\\{\\{([\\s\\S]*?)\\}\\}/g, function(_, e){\n"
-        + "  try {\n"
-        + "    var f = new Function('page', 'key', 'return (' + e + ')');\n"
-        + "    return String(f(params.pageIndex, params.keyWord));\n"
-        + "  } catch (err) {\n"
-        + "    return _;\n"
-        + "  }\n"
-        + "})\n\nreturn encodeURI(url)",
-        [{ key: "order", items: itemsR }],
-        "分类页[更多]：" + itemsR.length + " 个分类结构特殊，运行时求值（支持算术与三元表达式）");
+    var branches=["var selected=String(params && params.filter || params && params.filters && params.filters.order || "+JSON.stringify(itemsR[0].value)+");"];
+    for(var bi=0;bi<itemsR.length;bi++){
+      var built=urlRule.buildRequestInfo(itemsR[bi].value,jctx,'explore');
+      warnings=warnings.concat(built.warnings||[]);
+      var statement=built.requestInfo;
+      if(statement.indexOf('@js:')===0)statement=statement.slice(4).replace(/return \{url: url\};/, 'return url;');
+      else statement='return '+JSON.stringify(statement).replace(/%@pageIndex/g,'"+params.pageIndex+"').replace(/%@keyWord/g,'"+encodeURIComponent(params.keyWord)+"')+';';
+      branches.push('if(selected==='+JSON.stringify(itemsR[bi].value)+'){'+statement+'}');
+    }
+    branches.push("return ''; ");
+    pushEntry("更多","@js:\n"+branches.join('\n'),[{key:'order',items:itemsR}],"分类页[更多]："+itemsR.length+" 个分类已在转换时编译模板，不在 App 执行 new Function/eval");
   }
 
   if (!entries.length) {

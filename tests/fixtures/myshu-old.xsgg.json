@@ -1,0 +1,72 @@
+{
+  "天天小书屋": {
+    "chapterContent": {
+      "validConfig": "",
+      "responseFormatType": "html",
+      "parserID": "DOM",
+      "host": "https://www.myshu.cc",
+      "content": "//div[@id='content']",
+      "actionID": "chapterContent"
+    },
+    "enable": false,
+    "authorId": "",
+    "bookDetail": {
+      "actionID": "bookDetail",
+      "parserID": "DOM"
+    },
+    "shupingList": {
+      "actionID": "shupingList",
+      "parserID": "DOM"
+    },
+    "bookWorld": {},
+    "shudanList": {},
+    "sourceUrl": "https://www.myshu.cc",
+    "relatedWord": {
+      "actionID": "relatedWord",
+      "parserID": "DOM"
+    },
+    "weight": "3647",
+    "sourceName": "天天小书屋",
+    "miniAppVersion": "2.53.2",
+    "shudanDetail": {
+      "actionID": "shudanDetail",
+      "parserID": "DOM"
+    },
+    "lastModifyTime": "1647070661.784851",
+    "shupingHome": {
+      "actionID": "shupingHome",
+      "parserID": "DOM"
+    },
+    "searchShudan": {
+      "actionID": "searchShudan",
+      "parserID": "DOM"
+    },
+    "searchBook": {
+      "requestParamsEncode": "2147485234",
+      "cat": "//div[@class='cat']/text()|@replace:分类：",
+      "author": "//div[@class='author']/text() |@replace:作者：",
+      "lastChapterTitle": "//div[@class=\"update\"]/a/text()",
+      "responseFormatType": "html",
+      "bookName": "//h4/a/text()",
+      "desc": "//p || @js:\nreturn result.replace(/[\\u201c\\u201d]/g,\"'\");",
+      "requestInfo": "/s.php?ie=gbk&q=%@keyWord",
+      "host": "https://www.myshu.cc",
+      "actionID": "searchBook",
+      "detailUrl": "//h4/a/@href",
+      "cover": "//div[@class=\"bookimg\"]/a/img/@src",
+      "validConfig": "",
+      "list": "//div[@class='so_list bookcase']/div/div",
+      "parserID": "DOM"
+    },
+    "chapterList": {
+      "validConfig": "",
+      "actionID": "chapterList",
+      "title": "//a",
+      "host": "https://www.myshu.cc",
+      "list": "//div[@class='listmain']/dl/dt[2]/following::dd",
+      "responseFormatType": "html",
+      "parserID": "DOM",
+      "url": "//a/@href"
+    }
+  }
+}

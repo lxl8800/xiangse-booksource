@@ -10,6 +10,26 @@ var utils = require("./utils");
 var escAttr = utils.escAttr;
 var escStr = utils.escStr;
 
+// Split comma-separated CSS groups while preserving commas in attributes and pseudo functions.
+function splitCssGroups(s) {
+  var out = [], start = 0, square = 0, round = 0, quote = null;
+  for (var i = 0; i < s.length; i++) {
+    var c = s[i];
+    if (quote) { if (c === "\\") { i++; continue; } if (c === quote) quote = null; continue; }
+    if (c === "'" || c === '"') { quote = c; continue; }
+    if (c === "[") square++;
+    else if (c === "]") square--;
+    else if (c === "(") round++;
+    else if (c === ")") round--;
+    else if (c === "," && square === 0 && round === 0) {
+      if (s.slice(start, i).trim()) out.push(s.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  if (s.slice(start).trim()) out.push(s.slice(start).trim());
+  return out;
+}
+
 // [attr=val] → XPath 谓词（不含方括号）
 function attrPredicateToXpath(bracket) {
   var inner = bracket.slice(1, -1).trim();
@@ -24,7 +44,7 @@ function attrPredicateToXpath(bracket) {
   if ((val[0] === '"' && val.slice(-1) === '"') || (val[0] === "'" && val.slice(-1) === "'")) {
     val = val.slice(1, -1);
   }
-  var v = '"' + escAttr(val) + '"';
+  var v = utils.xpathLiteral(val);
   switch (op) {
     case "=": return { predicate: "[@" + attr + "=" + v + "]", error: null };
     case "^=": return { predicate: "[starts-with(@" + attr + "," + v + ")]", error: null };
@@ -64,7 +84,7 @@ function parseCompound(tok, ctx, notes) {
     if (c === ".") {
       var m2 = tok.slice(i).match(/^\.([\w-]+)/);
       if (!m2) return { error: "class 选择器无法解析: " + tok };
-      preds.push('contains(@class,"' + escAttr(m2[1]) + '")');
+      preds.push("contains(concat(' ', normalize-space(@class), ' '), ' " + escAttr(m2[1]) + " ')");
       i += m2[0].length;
       first = false;
       continue;
@@ -88,7 +108,7 @@ function parseCompound(tok, ctx, notes) {
       continue;
     }
     if (c === ":") {
-      var pm = tok.slice(i).match(/^:([a-zA-Z]+)(\(([^)]*)\))?/);
+      var pm = tok.slice(i).match(/^:([a-zA-Z-]+)(\(([^)]*)\))?/);
       if (!pm) return { error: "伪类无法解析: " + tok };
       var name = pm[1];
       var arg = pm[3] !== undefined ? pm[3] : null;
@@ -111,6 +131,33 @@ function parseCompound(tok, ctx, notes) {
           break;
         case "first":
           pr = "1";
+          break;
+        case "first-child":
+          pr = "not(preceding-sibling::*)";
+          break;
+        case "last-child":
+          pr = "not(following-sibling::*)";
+          break;
+        case "nth-child":
+          if (arg === "odd") pr = "(count(preceding-sibling::*) mod 2)=0";
+          else if (arg === "even") pr = "(count(preceding-sibling::*) mod 2)=1";
+          else if (/^\d+$/.test(arg || "")) pr = "count(preceding-sibling::*)=" + (Number(arg) - 1);
+          else return { error: ":nth-child 参数暂不支持: " + arg };
+          break;
+        case "not":
+          if (/^\.[\w-]+$/.test(arg || "")) {
+            var cls = arg.slice(1);
+            pr = "not(contains(concat(' ', normalize-space(@class), ' '), ' " + escAttr(cls) + " '))";
+          } else if (/^#[\w-]+$/.test(arg || "")) {
+            pr = "not(@id=\"" + escAttr(arg.slice(1)) + "\")";
+          } else if (/^[\w-]+$/.test(arg || "")) {
+            pr = "not(self::" + arg + ")";
+          } else return { error: ":not() 复杂参数暂不支持: " + arg };
+          break;
+        case "has":
+          if (/^[a-zA-Z][\w-]*$/.test(arg || "")) pr = ".//" + arg;
+          else if (/^\.[\w-]+$/.test(arg || "")) pr = ".//*[contains(concat(' ', normalize-space(@class), ' '), ' " + escAttr(arg.slice(1)) + " ')]";
+          else return { error: ":has() 复杂参数暂不支持: " + arg };
           break;
         case "last":
           pr = "position()=last()";
@@ -154,7 +201,7 @@ function selectorToXpathChain(selector, ctx) {
   var step = 0;
   while (i < n) {
     var c = selector[i];
-    if (c === ">" || c === "+") {
+    if (c === ">" || c === "+" || c === "~") {
       if (buf) { tokens.push({ sel: buf, comb: comb }); buf = ""; }
       else if (tokens.length) tokens[tokens.length - 1].comb = tokens[tokens.length - 1].comb || " ";
       comb = c;
@@ -181,7 +228,7 @@ function selectorToXpathChain(selector, ctx) {
     var sep;
     if (t === 0) sep = "//";
     else if (comb2 === ">") sep = "/";
-    else if (comb2 === "+") sep = "/following-sibling::";
+    else if (comb2 === "+" || comb2 === "~") sep = "/following-sibling::";
     else sep = "//";
     if (comb2 === "+") {
       // 相邻兄弟：取第一个匹配（保持旧行为）
@@ -222,15 +269,22 @@ function convertCss(rule, ctx) {
     selector = body.slice(0, at);
     content = body.slice(at + 1);
   }
-  var ch = selectorToXpathChain(selector, ctx);
-  if (ch.error) return { error: ch.error, notes: notes.concat(ch.notes) };
-  notes = notes.concat(ch.notes);
+  var groups = splitCssGroups(selector);
+  if (!groups.length) return { error: "空 CSS 选择器", notes: notes };
+  var xps = [];
+  for (var gi = 0; gi < groups.length; gi++) {
+    var ch = selectorToXpathChain(groups[gi], ctx);
+    if (ch.error) return { error: ch.error, notes: notes.concat(ch.notes) };
+    xps.push(ch.xpath);
+    notes = notes.concat(ch.notes);
+  }
+  var xpath = xps.length === 1 ? xps[0] : "(" + xps.join(" | ") + ")";
   if (content !== null) {
     var m = require("./defaultRule").mapContentOp(content, ctx);
-    ch.xpath += m.xpath;
+    xpath += m.xpath;
     notes = notes.concat(m.notes);
   }
-  return { xpath: ch.xpath, notes: notes };
+  return { xpath: xpath, notes: notes };
 }
 
 module.exports = {

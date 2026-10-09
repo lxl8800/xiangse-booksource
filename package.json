@@ -1,0 +1,17 @@
+{
+  "name": "xiangse-booksource",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test server/tests/*.test.js"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "1.1.0",
+    "express": "5.1.0",
+    "ipaddr.js": "2.2.0",
+    "jsdom": "26.1.0",
+    "undici": "7.16.0"
+  }
+}

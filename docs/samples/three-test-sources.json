@@ -1,0 +1,175 @@
+[
+  {
+    "bookSourceName": "速读谷",
+    "bookSourceType": 0,
+    "bookSourceUrl": "https://suduguu.com/",
+    "bookUrlPattern": "https://suduguu\\.com/\\d+/",
+    "customOrder": 11,
+    "enabled": true,
+    "enabledCookieJar": false,
+    "enabledExplore": true,
+    "header": "{\"User-Agent\":\"Mozilla/5.0 (Linux; Android 9) Mobile Safari/537.36\"}",
+    "jsLib": "function getCover(href) { return href && href.startsWith('http') ? href : 'https://suduguu.com' + (href||''); }",
+    "exploreUrl": "@js:\nvar inputData = `°·*.☆ 全部榜单 ☆.*·°\n最近更新::/zuixin/{{page}}.html\n热门小说::/paihang/{{page}}.html\n连载小说::/lianzai/{{page}}.html\n完结小说::/wanjie/{{page}}.html\n玄幻小说::/xuanhuan/{{page}}.html\n仙侠小说::/xianxia/{{page}}.html\n都市小说::/dushi/{{page}}.html\n历史小说::/lishi/{{page}}.html\n科幻小说::/kehuan/{{page}}.html\n轻小说::/qing/{{page}}.html\n悬疑小说::/xuanyi/{{page}}.html\n游戏小说::/youxi/{{page}}.html\n奇幻小说::/qihuan/{{page}}.html\n诸天无限::/zhutianwuxian/{{page}}.html\n军事小说::/junshi/{{page}}.html\n重生小说::/chongsheng/{{page}}.html\n武侠小说::/wuxia/{{page}}.html\n体育小说::/tiyu/{{page}}.html\n言情小说::/yanqing/{{page}}.html`;\nvar categories = [];\nvar lines = inputData.split('\\n').filter(l => l.trim());\nvar items = [];\nfor(var i=0;i<lines.length;i++){ var parts=lines[i].split('::');var title=parts[0]||'';var url=(parts[1]||'').trim();if(!url){categories.push({title:title,url:'',style:{layout_flexGrow:1,layout_flexBasisPercent:1}});}else{items.push({title:title,url:url,style:{layout_flexGrow:1,layout_flexBasisPercent:0.25}});}}\nfor(var j=0;j<items.length;j++)categories.push(items[j]);\nJSON.stringify(categories);",
+    "ruleExplore": {
+      "bookList": ".item",
+      "bookUrl": "a@href",
+      "coverUrl": "img@src@js:getCover(result)",
+      "name": "h3@a@text",
+      "author": "p@a@text##作者[：:]",
+      "kind": "p@span@text",
+      "lastChapter": "ul@li@a@text",
+      "intro": ".desc@text"
+    },
+    "searchUrl": "/i/sor.aspx?key={{key}}",
+    "ruleSearch": {
+      "bookList": ".item",
+      "bookUrl": "a@href",
+      "coverUrl": "img@src@js:getCover(result)",
+      "name": "h3@a@text",
+      "author": "p@a@text##作者[：:]",
+      "kind": "p@span@text",
+      "lastChapter": "ul@li@a@text"
+    },
+    "ruleBookInfo": {
+      "name": "h1@a@text",
+      "author": ".itemtxt@p.1@text##作者[：:]",
+      "coverUrl": ".item@img@src@js:getCover(result)",
+      "intro": ".des@p@text##简介[：:]",
+      "kind": ".itemtxt@p.0@text",
+      "wordCount": "h1@i@text",
+      "lastChapter": ".itemtxt@ul@li.0@a@text"
+    },
+    "ruleToc": {
+      "chapterList": "#list@ul@li@a",
+      "chapterName": "text##[\\(\\{（｛【].*[首为求更谢乐发推票章盟第补合感订加字KkWw\\/].*[\\)\\}）｝】]",
+      "chapterUrl": "href",
+      "nextTocUrl": "text.下一页@href"
+    },
+    "ruleContent": {
+      "content": ".con@html",
+      "nextContentUrl": "text.下一页@href",
+      "replaceRegex": "@js:\nvar r = result; r = r.replace(/\\(本章完\\)/g,'').replace(/速读谷/g,'').replace(/suduguu\\.com/g,'').replace(/最新最快无错/g,'').replace(/请收藏本站/g,'');r;"
+    },
+    "lastUpdateTime": "1791506505721"
+  },
+  {
+    "bookSourceComment": "//黑岩小说",
+    "bookSourceGroup": "一程",
+    "bookSourceName": "🎉 柠檬小说",
+    "bookSourceType": 0,
+    "bookSourceUrl": "https://search.lemonyd.com",
+    "customOrder": -88903126,
+    "enabled": true,
+    "enabledCookieJar": true,
+    "enabledExplore": true,
+    "enabledReview": true,
+    "exploreUrl": "[{\"title\":\"男生\",\"url\":\"\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":1}},{\"title\":\"现代都市\",\"url\":\"/m/book/list?sort=1&words=-1&order=0&size=20&page={{page}}&channel=5&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"玄幻修真\",\"url\":\"/m/book/list?sort=2&words=-1&order=0&size=20&page={{page}}&channel=5&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"武侠仙侠\",\"url\":\"/m/book/list?sort=3&words=-1&order=0&size=20&page={{page}}&channel=5&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"历史军事\",\"url\":\"/m/book/list?sort=4&words=-1&order=0&size=20&page={{page}}&channel=5&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"科幻末日\",\"url\":\"/m/book/list?sort=5&words=-1&order=0&size=20&page={{page}}&channel=5&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"游戏竞技\",\"url\":\"/m/book/list?sort=7&words=-1&order=0&size=20&page={{page}}&channel=5&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"女生\",\"url\":\"\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":1}},{\"title\":\"现代言情\",\"url\":\"/m/book/list?sort=101&words=-1&order=0&size=20&page={{page}}&channel=6&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"古代言情\",\"url\":\"/m/book/list?sort=102&words=-1&order=0&size=20&page={{page}}&channel=6&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"幻想言情\",\"url\":\"/m/book/list?sort=103&words=-1&order=0&size=20&page={{page}}&channel=6&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"浪漫青春\",\"url\":\"/m/book/list?sort=104&words=-1&order=0&size=20&page={{page}}&channel=6&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"短篇小说\",\"url\":\"/m/book/list?sort=107&words=-1&order=0&size=20&page={{page}}&channel=6&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"其他小说\",\"url\":\"/m/book/list?sort=9&words=-1&order=0&size=20&page={{page}}&channel=6&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}},{\"title\":\"图书\",\"url\":\"\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":1}},{\"title\":\"阅读强国\",\"url\":\"/m/book/list?sort=11&words=-1&order=0&size=20&page={{page}}&channel=7&finish=\",\"style\":{\"layout_flexGrow\":1,\"layout_flexBasisPercent\":0.25}}]",
+    "header": "",
+    "respondTime": 12040,
+    "ruleBookInfo": {
+      "init": ""
+    },
+    "ruleContent": {
+      "content": ".con-wra@p@html"
+    },
+    "ruleExplore": {
+      "bookList": ""
+    },
+    "ruleReview": {},
+    "ruleSearch": {
+      "author": "$.authorname##<span style=\"color:red\">|</span>",
+      "bookList": "$..content[*]",
+      "bookUrl": "https://biz.lemonyd.com/book/chapter/book/{{$.id}}?volumeIndex=0",
+      "checkKeyWord": "青春",
+      "coverUrl": "$.iconUrlSmall",
+      "intro": "🏷️   {{$.tags&&}}{{'\\n'+'​'}}\\n{{$.introduce}}##(^|[。！？]+[”」）】]?)##$1<br>",
+      "kind": "$.groupName&&$.updatetime##\\s..:.*",
+      "lastChapter": "$.lastchaptername",
+      "name": "$.name##<span style=\"color:red\">|</span>|\\（.*|\\(.*",
+      "wordCount": "$.words"
+    },
+    "ruleToc": {
+      "chapterList": "$..rf[*]",
+      "chapterName": "$.name",
+      "chapterUrl": "$.chapterId@js:\nid=baseUrl.match(/(\\d+)/)[1];result='https://m.lemonyd.com/chapter/'+id+'/'+result+'?smss=true'+',{\"webView\": true}'",
+      "nextTocUrl": "https://biz.lemonyd.com/book/chapter/book/{{$..id}}?volumeIndex={{$..current}}",
+      "updateTime": "{{$.publishDate}} · {{$.words}}字"
+    },
+    "searchUrl": "/m/book/search?queryString={{key}}&page={{page}}&size=10",
+    "weight": 0,
+    "lastUpdateTime": 1667034108858
+  },
+  {
+    "天天小书屋": {
+      "chapterContent": {
+        "validConfig": "",
+        "responseFormatType": "html",
+        "parserID": "DOM",
+        "host": "https://www.myshu.cc",
+        "content": "//div[@id='content']",
+        "actionID": "chapterContent"
+      },
+      "enable": false,
+      "authorId": "",
+      "bookDetail": {
+        "actionID": "bookDetail",
+        "parserID": "DOM"
+      },
+      "shupingList": {
+        "actionID": "shupingList",
+        "parserID": "DOM"
+      },
+      "bookWorld": {},
+      "shudanList": {},
+      "sourceUrl": "https://www.myshu.cc",
+      "relatedWord": {
+        "actionID": "relatedWord",
+        "parserID": "DOM"
+      },
+      "weight": "3647",
+      "sourceName": "天天小书屋",
+      "miniAppVersion": "2.53.2",
+      "shudanDetail": {
+        "actionID": "shudanDetail",
+        "parserID": "DOM"
+      },
+      "lastModifyTime": "1647070661.784851",
+      "shupingHome": {
+        "actionID": "shupingHome",
+        "parserID": "DOM"
+      },
+      "searchShudan": {
+        "actionID": "searchShudan",
+        "parserID": "DOM"
+      },
+      "searchBook": {
+        "requestParamsEncode": "2147485234",
+        "cat": "//div[@class='cat']/text()|@replace:分类：",
+        "author": "//div[@class='author']/text() |@replace:作者：",
+        "lastChapterTitle": "//div[@class=\"update\"]/a/text()",
+        "responseFormatType": "html",
+        "bookName": "//h4/a/text()",
+        "desc": "//p || @js:\nreturn result.replace(/[\\u201c\\u201d]/g,\"'\");",
+        "requestInfo": "/s.php?ie=gbk&q=%@keyWord",
+        "host": "https://www.myshu.cc",
+        "actionID": "searchBook",
+        "detailUrl": "//h4/a/@href",
+        "cover": "//div[@class=\"bookimg\"]/a/img/@src",
+        "validConfig": "",
+        "list": "//div[@class='so_list bookcase']/div/div",
+        "parserID": "DOM"
+      },
+      "chapterList": {
+        "validConfig": "",
+        "actionID": "chapterList",
+        "title": "//a",
+        "host": "https://www.myshu.cc",
+        "list": "//div[@class='listmain']/dl/dt[2]/following::dd",
+        "responseFormatType": "html",
+        "parserID": "DOM",
+        "url": "//a/@href"
+      }
+    }
+  }
+]

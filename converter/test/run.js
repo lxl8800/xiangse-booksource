@@ -15,8 +15,12 @@ function load(name) {
 
 // 已知差异：路径 → 说明
 var WHITELIST = {
+  ".bookWorld.分类.requestInfo": "params.filter 优先并提供缺省分类，分类请求绝对 URL；新增执行用例覆盖",
   ".sourceType": "mine 新增字段（bookSourceType 映射 text/audio/comic/video），golden 无",
   ".bookDetail.desc": "mine @text → //text()（含后代，防内嵌标签漏字）",
+  ".bookDetail.requestInfo": "2.56.1 核心动作显式沿用上一阶段请求 URL",
+  ".chapterList.requestInfo": "2.56.1 核心动作显式沿用上一阶段请求 URL",
+  ".chapterContent.requestInfo": "2.56.1 核心动作显式沿用上一阶段请求 URL",
   ".chapterContent.moreKeys": "mine 新增 maxPage 默认 6（nextPageUrl 存在时规则要求必填）",
   ".chapterList.title": "同上语义升级",
   ".bookWorld.分类.desc": "同上语义升级",
@@ -36,6 +40,7 @@ var WHITELIST = {
   ".bookDetail.cat": "mine 带 return 更安全，golden 无 return（语义等价）",
   ".bookDetail.lastChapterTitle": "golden 含拼写简化（hiden-xs），mine 忠实原规则",
   ".chapterList.list": "mine //（后代），golden /（子级），等价",
+  ".chapterList.url": "自动根据 responseUrl 将相对 href 转为绝对路径",
   ".chapterContent.content": "mine //*，golden //div，等价",
   ".chapterContent.nextPageUrl": "mine 忠实 Legado 文本「下一章」，golden 人工改「下一页」",
   ".bookWorld.分类.list": "mine 保留 hotcontent 上下文，golden 人工简化为 //div[contains(@class,\"item\")]",
@@ -100,9 +105,9 @@ test("bookWorld 结构与金标准一致", function () {
   if (bw[key].moreKeys.requestFilters !== golden[key].moreKeys.requestFilters) {
     throw new Error("requestFilters 不一致");
   }
-  if (bw[key].requestInfo !== golden[key].requestInfo) {
-    throw new Error("requestInfo 不一致:\n" + bw[key].requestInfo + "\n!=\n" + golden[key].requestInfo);
-  }
+  var actual=new Function('params',bw[key].requestInfo.slice(4))({filter:'xuanhuan',pageIndex:2});
+  var expected='https://www.min-yuan.com/xuanhuan/2.html';
+  if((actual.url||actual)!==expected)throw Error('分类请求 URL 错误');
 });
 
 test("searchBook.requestInfo 占位符正确", function () {
@@ -119,7 +124,8 @@ test("顶层字段齐全", function () {
    "searchBook", "bookDetail", "chapterList", "chapterContent", "bookWorld"].forEach(function (k) {
     if (!(k in top)) throw new Error("缺少顶层字段: " + k);
   });
-  if (top.enable !== "1") throw new Error("enable 应为 \"1\"");
+  if (top.enable !== 1) throw new Error("enable 应为整数 1");
+  if (Number(top.weight) < 1) throw new Error("weight 必须大于或等于 1");
   if (top.miniAppVersion !== "2.53.2") throw new Error("miniAppVersion 应为 2.53.2");
 });
 
@@ -130,7 +136,7 @@ test("生成的 @js 脚本均可通过语法检查", function () {
     Object.keys(obj || {}).forEach(function (k) {
       var v = obj[k];
       if (typeof v === "string") {
-        v.split(" || ").forEach(function (part) {
+        (v.trim().indexOf("@js:")===0 ? [v] : v.split(" || ")).forEach(function (part) {
           if (part.indexOf("@js:") === -1) return;
           var code = part.slice(part.indexOf("@js:") + 4);
           code = code.replace(/^cryptojs=[\s\S]*?\n/, "").trim();

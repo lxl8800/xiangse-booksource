@@ -132,6 +132,14 @@ function escAttr(s) {
   return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+function xpathLiteral(value){
+  var s=String(value);
+  if(s.indexOf('"')<0)return '"'+s+'"';
+  if(s.indexOf("'")<0)return "'"+s+"'";
+  return 'concat('+s.split('"').map(function(x){return '"'+x+'"';}).join(',\'"\',')+')';
+}
+function unquote(value){var s=String(value);if((s[0]==='"'&&s.slice(-1)==='"')||(s[0]==="'"&&s.slice(-1)==="'"))return s.slice(1,-1);return s;}
+
 // 转义 JS 正则字面量中的 /（反斜杠按原样保留，字面量里 \d 即数字类）
 function escRegex(s) {
   return String(s).replace(/\//g, "\\/");
@@ -206,12 +214,17 @@ function resolveUrl(rel, base) {
   if (!rel) return rel;
   var s = String(rel).trim();
   if (/^https?:\/\//i.test(s) || /^data:/i.test(s)) return s;
+  var templates=[],prefix='_XST_FULL_';
+  while(s.indexOf(prefix)>=0)prefix+='_';
+  s=s.replace(/\{\{[\s\S]*?\}\}/g,function(t){var marker=prefix+templates.length+'_';templates.push({marker:marker,value:t});return marker;});
   s = s.replace(/\{\{/g, "_XSTMPL_O_").replace(/\}\}/g, "_XSTMPL_C_").replace(/%@/g, "_XSTMPL_P_");
   try {
-    return new URL(s, base).href
+    var resolved = new URL(s, base).href
       .replace(/_XSTMPL_O_/g, "{{")
       .replace(/_XSTMPL_C_/g, "}}")
       .replace(/_XSTMPL_P_/g, "%@");
+    templates.forEach(function(t){resolved=resolved.split(t.marker).join(t.value);});
+    return resolved;
   } catch (e) {
     return String(rel).trim();
   }
@@ -222,6 +235,8 @@ module.exports = {
   splitTopLevel: splitTopLevel,
   findCleanup: findCleanup,
   escAttr: escAttr,
+  xpathLiteral:xpathLiteral,
+  unquote:unquote,
   escRegex: escRegex,
   escStr: escStr,
   isLiteralText: isLiteralText,

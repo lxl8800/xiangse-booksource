@@ -6,7 +6,6 @@ build/
 
 # Node
 node_modules/
-package-lock.json
 
 # Python
 __pycache__/
@@ -19,3 +18,15 @@ Thumbs.db
 # 编辑器
 .idea/
 .vscode/
+
+# Local credentials, runtime evidence, and deployment backups
+.env
+.env.*
+!.env.example
+*.log
+reports/
+backups/
+*.pem
+*.key
+LOCAL-DEPLOY.md
+SINGLE-CONTAINER.md

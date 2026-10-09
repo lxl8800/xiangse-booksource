@@ -21,7 +21,7 @@ var BASE = { src: {}, host: "https://x.com", jsonEnabled: false };
 // ---------- defaultRule ----------
 test("Default: class. 类型与位置", function () {
   eq(defaultRule.convertDefault("class.odd.0@tag.a.0@text", BASE).xpath,
-     '((//*[contains(@class,"odd")])[1]//a)[1]//text()');
+     "((//*[contains(concat(' ', normalize-space(@class), ' '), ' odd ')])[1]//a)[1]//text()");
 });
 test("Default: #id 后代链", function () {
   eq(defaultRule.convertDefault("#fmimg img@data-original", BASE).xpath,
@@ -37,34 +37,48 @@ test("Default: CSS 式裸选择器 + 属性", function () {
 });
 test("Default: 排除 ! 与位置", function () {
   eq(defaultRule.convertDefault("class.x.0!1@text", BASE).xpath,
-     '(//*[contains(@class,"x")])[1 and not(2)]//text()');
+     "(//*[contains(concat(' ', normalize-space(@class), ' '), ' x ')])[1 and not(position()=2)]//text()");
   eq(defaultRule.convertDefault("li.3@text", BASE).xpath,
      '(//li)[4]//text()');
 });
+test("Default: 排除索引不得生成恒为假的 not(1)", function () {
+  var rule = defaultRule.convertDefault("#content@p!0@html", { field: "content", src: {} });
+  ok(rule.xpath.indexOf("not(position()=1)") !== -1, "应排除首段，而非所有段落: " + rule.xpath);
+  ok(rule.xpath.indexOf("not(1)") === -1, "不能生成恒为假的 XPath 条件");
+  var spec = defaultRule.convertDefault("tag.p@[!0,1]@text", BASE);
+  ok(spec.xpath.indexOf("not(position()=1 or position()=2)") !== -1, "列表排除必须使用 position() 判定: " + spec.xpath);
+});
+
 test("Default: html/all 按书源类型分流", function () {
-  // 小说源：强制仅显文本 → //text()
+  // 小说正文输出 DOM 容器节点，适配 XSGG 内容选择器（非碎片化 //text()）
   eq(defaultRule.convertDefault("id.booktxt@html", { field: "content", src: {} }).xpath,
+     '//*[contains(@id,"booktxt")]');
+  eq(defaultRule.convertDefault("id.booktxt@textNodes", { field: "content", src: {} }).xpath,
+     '//*[contains(@id,"booktxt")]');
+  eq(defaultRule.convertDefault("id.booktxt@text", { field: "content", src: {} }).xpath,
+     '//*[contains(@id,"booktxt")]');
+  eq(defaultRule.convertDefault("id.booktxt@text", { field: "author", src: {} }).xpath,
      '//*[contains(@id,"booktxt")]//text()');
   // 漫画源：显式取图 @src + 提示懒加载需人工核对
   var r2 = defaultRule.convertDefault("class.lazy@all", { field: "content", src: { bookSourceType: 2 } });
-  eq(r2.xpath, '//*[contains(@class,"lazy")]//img/@src');
+  eq(r2.xpath, "//*[contains(concat(' ', normalize-space(@class), ' '), ' lazy ')]//img/@src");
   ok(r2.notes.some(function(n){ return n.indexOf("data-src") !== -1; }), "应有懒加载提示");
 });
 
 // ---------- cssRule ----------
 test("CSS: 后代/类/id", function () {
-  eq(cssRule.convertCss("@css:.item a@href", BASE).xpath, '//*[contains(@class,"item")]//a/@href');
+  eq(cssRule.convertCss("@css:.item a@href", BASE).xpath, "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]//a/@href");
   eq(cssRule.convertCss("@css:#list li:first@text", BASE).xpath, '(//*[@id="list"]//li)[1]//text()');
 });
 
 // ---------- rules ----------
 test("规则: || 备选拆分", function () {
   var r = rules.convertRule("a@href || .b@href", BASE);
-  eq(r.value, '//a/@href || //*[contains(@class,"b")]/@href');
+  eq(r.value, "//a/@href || //*[contains(concat(' ', normalize-space(@class), ' '), ' b ')]/@href");
 });
 test("规则: ## 净化 → @js replace（纯文本用字符串）", function () {
   var r = rules.convertRule(".sort@text##类别：", BASE);
-  eq(r.value, '//*[contains(@class,"sort")]//text()||@js:\nreturn result.replace("类别：","");');
+  eq(r.value, "//*[contains(concat(' ', normalize-space(@class), ' '), ' sort ')]//text()||@js:\nreturn result.replace(\"类别：\",\"\");");
 });
 test("规则: ### 正则净化 OnlyOne（无 g）", function () {
   var r = rules.convertRule("em@text###\\d+", BASE);
@@ -158,19 +172,21 @@ test("modules: 全模块组装", function () {
   var ctx = { src: mkSrc(), host: "https://x.com", jsonEnabled: false };
   var sb = modules.buildSearchBook(ctx.src, ctx);
   eq(sb.module.requestInfo, "https://x.com/s?k=%@keyWord");
-  eq(sb.module.list, '//*[contains(@class,"item")]');
-  eq(sb.module.detailUrl, "//a/@href");
+  eq(sb.module.list, "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]");
+  eq(sb.module.detailUrl, "(//a/@href)[1]");
   var toc = modules.buildChapterList(ctx.src, ctx);
   eq(toc.module.list, '//*[contains(@id,"list")]//dd');
   var cc = modules.buildChapterContent(ctx.src, ctx);
-  eq(cc.module.content, '//*[contains(@id,"ct")]//text()');
+  eq(cc.module.content, '//*[contains(@id,"ct")]');
 });
 test("modules: bookWorld _type 模式", function () {
   var ctx = { src: mkSrc(), host: "https://x.com", jsonEnabled: false };
   var bw = modules.buildBookWorld(ctx.src, ctx).module;
   var key = Object.keys(bw)[0];
   eq(key, "分类");
-  eq(bw[key].requestInfo, "@js:\nlet {_type}=params.filters\nlet url=`/${_type}/${params.pageIndex}.html`;\n\nreturn {url:url}");
+  var run = new Function('params',bw[key].requestInfo.slice(4));
+  eq(run({filter:'wx',pageIndex:2}), 'https://x.com/wx/2.html');
+  eq(run({pageIndex:1}), 'https://x.com/xh/1.html');
   eq(bw[key].moreKeys.requestFilters, "_type\n玄幻::xh\n武侠::wx");
   eq(bw[key].bookName, "(//a)[1]/@title");
   eq(bw[key].wordCount, "(//em)[1]//text()");
@@ -183,12 +199,7 @@ test("modules: bookWorld 逐行模式（格式二数组 + 分页拼接）", func
   var keys = Object.keys(bw);
   eq(keys.length, 1);
   var m = bw["分类"];
-  ok(m.moreKeys && Array.isArray(m.moreKeys.requestFilters), "requestFilters 应为格式二数组");
-  eq(m.moreKeys.requestFilters.length, 1);
-  eq(m.moreKeys.requestFilters[0].key, "order");
-  eq(m.moreKeys.requestFilters[0].items.length, 2);
-  eq(m.moreKeys.requestFilters[0].items[0].title, "玄幻");
-  eq(m.moreKeys.requestFilters[0].items[0].value, "/xh");
+  eq(m.moreKeys.requestFilters, "order\n玄幻::/xh\n武侠::https://y.com/wx");
   ok(m.requestInfo.indexOf("params.filters.order") !== -1, "requestInfo 应引用 params.filters.order");
   ok(m.requestInfo.indexOf("encodeURI") !== -1, "requestInfo 应 encodeURI");
 });
@@ -197,8 +208,8 @@ test("modules: bookWorld 单入口（拼接方案）", function () {
   var bw = modules.buildBookWorld(ctx.src, ctx).module;
   eq(Object.keys(bw).length, 1);
   var m = bw["分类"];
-  ok(m.requestInfo.indexOf('params.filters.order + "/" + params.pageIndex') !== -1, "单行走拼接方案");
-  ok(m.moreKeys.requestFilters[0].items[0].value === "https://x.com/list", "value 应为去页码后的根路径");
+  ok(m.requestInfo.indexOf('params.filter') !== -1, "单行支持 App 的 params.filter");
+  eq(m.moreKeys.requestFilters, "order\n分类::https://x.com/list");
 });
 test("modules: JSONPath 透传降级", function () {
   var ctx = { src: mkSrc(), host: "https://x.com", jsonEnabled: true };
@@ -264,7 +275,7 @@ test("modules: JSON 源整模块启用 json 解析", function () {
     ruleSearch: { bookList: "$.info.Datas", name: "name", author: "author", bookUrl: "$.url" }
   }), host: "https://x.com", jsonEnabled: false };
   var sb = modules.buildSearchBook(ctx.src, ctx);
-  eq(sb.module.parserID, "JSON");
+  eq(sb.module.parserID, "DOM");
   eq(sb.module.responseFormatType, "json");
   eq(sb.module.list, "$.info.Datas");
   eq(sb.module.bookName, "name");
@@ -277,11 +288,11 @@ test("rules: {{@@rule}} 整条解包", function () {
 });
 test("rules: {{@css:}} 整条解包", function () {
   var r = rules.convertRule("{{@css:.cover img@src}}", BASE);
-  eq(r.value, "//*[contains(@class,\"cover\")]//img/@src");
+  eq(r.value, "//*[contains(concat(' ', normalize-space(@class), ' '), ' cover ')]//img/@src");
 });
 test("rules: 文本+单 XPath 占位符 → ||@js:", function () {
   var r = rules.convertRule('https://static.missevan.com/{{//*[contains(@class,"pld")]/@data-soundurl64}}', BASE);
-  eq(r.value, '//*[contains(@class,"pld")]/@data-soundurl64||@js:\nreturn "https://static.missevan.com/"+result;');
+  eq(r.value, "//*[contains(concat(' ', normalize-space(@class), ' '), ' pld ')]/@data-soundurl64||@js:\nreturn \"https://static.missevan.com/\"+result;");
 });
 test("rules: 文本+单 JSONPath 占位符（json 模块）→ ||@js:", function () {
   var r = rules.convertRule("https://www.x.com/drama/{{$.id}}", { jsonEnabled: true });
@@ -367,6 +378,18 @@ test("urlRule: 请求上下文 baseUrl 按角色映射", function () {
   ok(sea.indexOf("config.host") !== -1, "搜索入口应映射为 config.host");
 });
 
+test("Default: 最末段 li!0 必须作为排除首项的节点选择器", function () {
+  var xp = defaultRule.convertDefault("id.main@li!0", BASE).xpath;
+  eq(xp, '(//*[contains(@id,"main")]//li)[not(position()=1)]');
+  var converted = converter.convert({
+    bookSourceName: "⚡📂笔趣阁", bookSourceUrl: "https://www.tianxiabachang.cn",
+    searchUrl: "https://www.tianxiabachang.cn/cse/search?q={{key}}&s=",
+    ruleSearch: { bookList: "id.main@li!0", name: "tag.a.0@text", bookUrl: "tag.a.0@href" },
+    ruleToc: {chapterList:"id.list@dl@dd@a",chapterName:"text",chapterUrl:"href"},
+    ruleContent: {content:"id.content@html"}
+  }, {forceEnableAll: true, forceWeight: true, defaultWeight: 100}).output;
+  eq(converted["⚡📂笔趣阁"].searchBook.list, xp);
+});
 test("Default: 裸词全为标签（div@ul@li）", function () {
   eq(defaultRule.convertDefault("div@ul@li", BASE).xpath, "//div//ul//li");
 });
