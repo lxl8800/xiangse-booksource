@@ -4,8 +4,6 @@
 
 **以确定性规则为核心，真实网站证据为辅助，AI 作为可选兜底。普通转换无需 API Key。**
 
-本项目基于 **[ljun223/legado2xsgg](https://github.com/ljun223/legado2xsgg)** 扩展，保留原项目的转换引擎、提交历史、Android 工具代码及 MIT 许可证。README 的组织方式参考了[上游说明](https://github.com/ljun223/legado2xsgg/blob/main/README.md)。感谢原作者 ljun223 的开源贡献。
-
 > 当前为持续完善中的开发版本，主要面向香色闺阁 StandarReader 2.56.1 的书源格式。格式合法、联网检测通过与官方 iOS App 实测是不同的验证阶段；转换结果仍需在目标 App 中确认。
 
 ## 功能
