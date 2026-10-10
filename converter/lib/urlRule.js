@@ -428,7 +428,57 @@ function expandOptionalPrefix(urlStr) {
   return { url: out, maps: maps };
 }
 
+
+// Recognize only data-only GET grammar emitted by the converter. Never execute input.
+function describeStaticGetRequest(rule) {
+  if (typeof rule !== "string" || rule.length > 4000) return null;
+  var raw = rule.trim(), forbidCookie = false, generated = false;
+  if (/^@js:/i.test(raw)) {
+    var match = raw.match(/^@js:\s*(?:let|var|const)\s+url\s*=\s*`([^`\\]*)`;\s*return\s+\{\s*url:\s*url(?:,\s*forbidCookie:\s*(true|false))?\s*\};?\s*$/);
+    if (!match) return null;
+    raw = match[1]; forbidCookie = match[2] === "true"; generated = true;
+    raw = raw.replace(/\$\{params\.keyWord\}/g, "%@keyWord").replace(/\$\{params\.pageIndex\}/g, "%@pageIndex");
+  }
+  if (/@js:|<js>|\$\{|javascript:/i.test(raw)) return null;
+  if (!raw || /[\r\n`]/.test(raw)) return null;
+  return { url: raw, method: "GET", forbidCookie: forbidCookie, generated: generated };
+}
+
+// Rewrite only the literal origin of a statically recognized GET request.
+// Keep the generated request object, paging placeholders and cookie intent.
+function rewriteStaticGetOrigin(rule, oldOrigin, newOrigin) {
+  var request=describeStaticGetRequest(rule);
+  if(!request || typeof oldOrigin!=="string" || typeof newOrigin!=="string")return rule;
+  var authority=request.url.match(/^https?:\/\/[^/?#\s]+/i);
+  if(!authority)return rule;
+  try {
+    var before=new URL(authority[0]),target=new URL(newOrigin);
+    if(before.username||before.password||before.origin!==oldOrigin||
+       !/^https?:$/.test(target.protocol)||target.username||target.password||target.origin!==newOrigin)return rule;
+  }catch(e){return rule;}
+  return rule.replace(authority[0],newOrigin);
+}
+
+// Replace a verified static GET URL without discarding its request object.
+function rewriteStaticGetUrl(rule, nextUrl) {
+  var request=describeStaticGetRequest(rule);
+  if(!request || typeof nextUrl!=="string" || nextUrl.length>2200 ||
+      /[\r\n\x60\\]|\$\{|@js:|<js>/i.test(nextUrl))return null;
+  var unknown=nextUrl.replace(/%@(?:keyWord|pageIndex)/g,"");
+  if(unknown.includes("%@"))return null;
+  try{
+    var target=new URL(nextUrl);
+    if(!/^https?:$/.test(target.protocol)||target.username||target.password||target.hash)return null;
+  }catch(e){return null;}
+  if(!request.generated)return nextUrl;
+  var literal=nextUrl.replace(/%@keyWord/g,"$"+"{params.keyWord}").replace(/%@pageIndex/g,"$"+"{params.pageIndex}");
+  return rule.replace(/\x60[^\x60\\]*\x60/,function(){return String.fromCharCode(96)+literal+String.fromCharCode(96);});
+}
+
 module.exports = {
+  rewriteStaticGetUrl: rewriteStaticGetUrl,
+  describeStaticGetRequest: describeStaticGetRequest,
+  rewriteStaticGetOrigin: rewriteStaticGetOrigin,
   buildRequestInfo: buildRequestInfo,
   splitUrlOptions: splitUrlOptions,
   findTemplates: findTemplates,

@@ -15,28 +15,55 @@
     return [];
   }
   function optionalSearch(alias,input,converted){
-    var origin=sourceList(input).find(x=>x.bookSourceName===alias || x.sourceName===alias);
-    if(!origin && window.BooksourceWebProbe?.originalLegado)origin=window.BooksourceWebProbe.originalLegado(alias);
-    if(typeof origin?.searchUrl==='string')return origin.searchUrl;
     var request=converted?.searchBook?.requestInfo;
-    if(typeof request==='string' && !request.startsWith('@js:'))return request;
-    return '';
+    if(!request){
+      var origin=sourceList(input).find(x=>x.bookSourceName===alias||x.sourceName===alias);
+      if(!origin&&window.BooksourceWebProbe?.originalLegado)origin=window.BooksourceWebProbe.originalLegado(alias);
+      request=origin?.searchUrl;
+    }
+    if(!request)return {};
+    var descriptor=window.ConverterLib?.describeStaticGetRequest?.(request);
+    if(!descriptor||/,\s*\{/.test(descriptor.url))return {searchProbeSkipped:'unsupported-search'};
+    try{
+      var url=new URL(descriptor.url,converted?.searchBook?.host||converted?.sourceUrl);
+      if(url.username||url.password||[...url.searchParams.keys()].some(key=>/token|api[_-]?key|secret|password|cookie|authorization|signature|session|credential|^(?:auth|auth[_-]?code|access[_-]?key|bearer)$/i.test(key)))
+        return {searchProbeSkipped:'sensitive-search'};
+      return {searchUrl:url.href};
+    }catch{return {searchProbeSkipped:'unsupported-search'};}
   }
-  function render(lines){
+  function render(lines,results){
     var root=$('domainCheckResults');
     if(!root)return;
     root.replaceChildren();
     lines.forEach(function(line){
       var item=document.createElement('div');item.textContent=line;root.appendChild(item);
     });
-    root.hidden=!lines.length;
+    (results||[]).slice(0,6).forEach(function(row){
+      var evidence=[];
+      ['home','search'].forEach(function(key){
+        var probe=row[key];if(!probe)return;
+        evidence.push((key==='home'?'首页':'搜索')+'：'+probe.status+' '+(probe.httpStatus?'HTTP '+probe.httpStatus:'')+(probe.reason?'；'+probe.reason:''));
+        if(probe.originalUrl)evidence.push('原始 URL：'+probe.originalUrl);
+        (probe.redirects||[]).forEach(function(hop){evidence.push('HTTP '+hop.status+' '+hop.url+' → '+(hop.location||'缺少 Location')+'；'+(hop.elapsedMs||0)+'ms'+(hop.reason?'；'+hop.reason:''));});
+        if(probe.url)evidence.push('最终请求 URL：'+probe.url);
+        if(probe.finalDomain)evidence.push('最终域名：'+probe.finalDomain);
+        if(probe.contentType)evidence.push('响应类型：'+probe.contentType);
+        if(typeof probe.elapsedMs==='number')evidence.push('总耗时：'+probe.elapsedMs+'ms');
+      });
+      if(!evidence.length)return;
+      var detail=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');
+      summary.textContent=row.sourceName+'：展开域名 HTTP 证据';
+      pre.textContent=evidence.join('\n');detail.append(summary,pre);root.appendChild(detail);
+    });
+    root.hidden=!lines.length&&!results?.length;
   }
   function setMessage(message){
     var status=$('domainCheckStatus');if(status)status.textContent=message;
   }
   function schedule(output,input){
     var id=++currentRun;
-    if(!$('autoDomainProbe')?.checked)return;
+    render([]);
+    if(!$('autoDomainProbe')?.checked){setMessage('域名自动检查已关闭。');return;}
     if(!output||typeof output!=='object')return;
     var names=Object.keys(output);
     if(!names.length)return;
@@ -53,7 +80,7 @@
     }).map(function(name){
       var source=output[name];
       return {sourceName:name,sourceUrl:source.sourceUrl,
-        searchUrl:optionalSearch(name,input,source)};
+        ...optionalSearch(name,input,source)};
     });
     if(!entries.length){render([]);return;}
     setMessage('正在自动检测 '+entries.length+' 个书源的域名是否迁移；格式结果已生成，不需 AI…');
@@ -76,13 +103,13 @@
           var rewrite=window.ConverterLib?.applyVerifiedDomainMove?.(result[row.sourceName],row);
           if(rewrite?.applied){
             result[row.sourceName]=rewrite.source;applied++;
-            log.push(row.sourceName+'：已自动更新 '+row.oldOrigin+' → '+row.newOrigin+'（修改 '+rewrite.changes.length+' 个 URL 配置）');
+            log.push(row.sourceName+'：已自动更新 '+row.oldOrigin+' → '+row.newOrigin+'（修改 '+rewrite.changes.length+' 个 URL 配置；阅读规则仍须验证）');
           }else if(rewrite?.needsReview){pending++;log.push(row.sourceName+'：'+rewrite.reason);}
         }else if(row.status==='needs-confirmation'){
           pending++;
-          log.push(row.sourceName+'：检测到 '+(row.newOrigin||'新网站')+'，未自动更换：'+row.reason);
+          log.push(row.sourceName+'：检测到 '+(row.newOrigin||'新网站')+'，未自动更换'+(row.migrationScope==='searchBook'?'（仅搜索模块）':'')+'：'+row.reason);
         }else if(row.status==='unverified'){
-          log.push(row.sourceName+'：暂无法确认站点跳转（'+(row.reason||'连接失败')+'），已保留原域名');
+          log.push(row.sourceName+'：暂无法完成域名/搜索验证（'+(row.reason||'连接失败')+'），已保留原域名');
         }
       });
       if(applied){
@@ -98,7 +125,7 @@
         }
         $('aiReadSources')?.click();
       }
-      render(log);
+      render(log,data.results);
       setMessage('域名自动检查完成：更新 '+applied+' 条，待进一步确认 '+pending+' 条。未验证的站点保持原始地址。');
     }).catch(function(error){
       if(id!==currentRun)return;

@@ -137,6 +137,14 @@ function escAttr(s) {
   return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+function xpathLiteral(value){
+  var s=String(value);
+  if(s.indexOf('"')<0)return '"'+s+'"';
+  if(s.indexOf("'")<0)return "'"+s+"'";
+  return 'concat('+s.split('"').map(function(x){return '"'+x+'"';}).join(',\'"\',')+')';
+}
+function unquote(value){var s=String(value);if((s[0]==='"'&&s.slice(-1)==='"')||(s[0]==="'"&&s.slice(-1)==="'"))return s.slice(1,-1);return s;}
+
 // 转义 JS 正则字面量中的 /（反斜杠按原样保留，字面量里 \d 即数字类）
 function escRegex(s) {
   return String(s).replace(/\//g, "\\/");
@@ -227,11 +235,32 @@ function resolveUrl(rel, base) {
   }
 }
 
+// XSGG scopes a leading // to its current list item. Parenthesized XPath
+// does not receive that treatment. Scope generated grouped expressions with
+// explicit relative axes, preserving global position within each list item.
+function scopeGroupedListXPath(xpath, ctx) {
+  if(!ctx || !ctx.listChildFields || typeof xpath!=="string" || xpath.trim().charAt(0)!=="(")return xpath;
+  var out="",quote=null,prev="";
+  for(var i=0;i<xpath.length;i++){
+    var c=xpath[i];
+    if(quote){out+=c;if(c===quote)quote=null;continue;}
+    if(c==="'" || c==='"'){quote=c;out+=c;continue;}
+    if(c==="/" && xpath[i+1]==="/" && (!prev || prev==="(" || prev==="|")){
+      out+=xpath[i+2]==="@" ? "descendant-or-self::*/" : "descendant::";i++;prev="/";continue;
+    }
+    out+=c;if(!/\s/.test(c))prev=c;
+  }
+  return out;
+}
+
 module.exports = {
+  scopeGroupedListXPath: scopeGroupedListXPath,
   topLevelPositions: topLevelPositions,
   splitTopLevel: splitTopLevel,
   findCleanup: findCleanup,
   escAttr: escAttr,
+  xpathLiteral:xpathLiteral,
+  unquote:unquote,
   escRegex: escRegex,
   escStr: escStr,
   isLiteralText: isLiteralText,
@@ -444,6 +473,10 @@ function findCloseParen(str, openIdx) {
 // 返回 { xpath, notes } 或 { error }
 function parseSegment(seg, ctx) {
   var notes = [];
+  if(/\s/.test(seg)){
+    var normalized=seg.replace(/(^|\s|>)tag\.([a-zA-Z][\w-]*)/g,'$1$2');
+    if(normalized!==seg){var mixed=require('./cssRule').selectorToXpathChain(normalized,ctx);if(!mixed.error)return {xpath:mixed.xpath,notes:mixed.notes};}
+  }
   if (seg === "") return { error: "空段" };
   if (seg === "children") return { xpath: "/*", notes: notes };
   if (seg[0] === "[") {
@@ -600,13 +633,13 @@ function parseSegment(seg, ctx) {
       xp = "//*[contains(concat(' ', normalize-space(@class), ' '), ' " + escAttr(name) + " ')]";
       break;
     case "id":
-      xp = '//*[contains(@id,"' + escAttr(name) + '")]';
+      xp = "//*[@id=" + utils.xpathLiteral(name) + "]";
       break;
     case "tag":
       xp = "//" + name;
       break;
     case "text":
-      xp = '//*[contains(text(),"' + escAttr(name) + '")]';
+      xp = "//*[contains(text()," + utils.xpathLiteral(name) + ")]";
       break;
     case "rel":
       // rel.xxx：标签 rel + class 条件（WordPress 常见 <a rel=...> 场景按标签+类处理）
@@ -619,7 +652,7 @@ function parseSegment(seg, ctx) {
   var preds = [];
   var idxParts = [];
   if (containsText !== null) {
-    preds.push('contains(text(),"' + escAttr(containsText) + '")');
+    preds.push("contains(text()," + utils.xpathLiteral(utils.unquote(containsText)) + ")");
   }
   if (tagPreds) preds = preds.concat(tagPreds);
   if (position !== null) idxParts.push(indexToPosExpr(position));
@@ -693,7 +726,7 @@ function convertDefault(rule, ctx) {
   if (acc === null || acc === "") {
     return { error: "空规则", notes: notes };
   }
-  return { xpath: acc, notes: notes };
+  return { xpath: utils.scopeGroupedListXPath(acc, ctx), notes: notes };
 }
 
 module.exports = {
@@ -717,6 +750,21 @@ __mods['cssRule']=function(module,exports,require){
 var utils = require("./utils");
 var escAttr = utils.escAttr;
 var escStr = utils.escStr;
+function decodeCssString(value) {
+  return String(value).replace(/\\(["'\\])/g, "$1");
+}
+
+// Delimiters inside quoted attribute values or nested pseudo functions are data.
+function closingDelimiter(text, start, open, close) {
+  var depth=1, quote=null;
+  for(var i=start+1;i<text.length;i++) {
+    var c=text[i];
+    if(quote){if(c==="\\"){i++;continue;}if(c===quote)quote=null;continue;}
+    if(c==="\'"||c==='"'){quote=c;continue;}
+    if(c===open)depth++;else if(c===close&&--depth===0)return i;
+  }
+  return -1;
+}
 
 // Split comma-separated CSS groups while preserving commas in attributes and pseudo functions.
 function splitCssGroups(s) {
@@ -752,7 +800,8 @@ function attrPredicateToXpath(bracket) {
   if ((val[0] === '"' && val.slice(-1) === '"') || (val[0] === "'" && val.slice(-1) === "'")) {
     val = val.slice(1, -1);
   }
-  var v = '"' + escAttr(val) + '"';
+  val = decodeCssString(val);
+  var v = utils.xpathLiteral(val);
   switch (op) {
     case "=": return { predicate: "[@" + attr + "=" + v + "]", error: null };
     case "^=": return { predicate: "[starts-with(@" + attr + "," + v + ")]", error: null };
@@ -762,7 +811,7 @@ function attrPredicateToXpath(bracket) {
     };
     case "*=": return { predicate: "[contains(@" + attr + "," + v + ")]", error: null };
     case "~=": return {
-      predicate: "[contains(concat(' ',normalize-space(@" + attr + "),' '),' " + escAttr(val) + " ')]",
+      predicate: "[contains(concat(' ',normalize-space(@" + attr + "),' ')," + utils.xpathLiteral(" "+val+" ") + ")]",
       error: null
     };
     case "!=":
@@ -806,7 +855,7 @@ function parseCompound(tok, ctx, notes) {
       continue;
     }
     if (c === "[") {
-      var end = tok.indexOf("]", i);
+      var end = closingDelimiter(tok, i, "[", "]");
       if (end === -1) return { error: "属性选择器未闭合: " + tok };
       var r = attrPredicateToXpath(tok.slice(i, end + 1));
       if (r.error) return { error: r.error };
@@ -816,26 +865,31 @@ function parseCompound(tok, ctx, notes) {
       continue;
     }
     if (c === ":") {
-      var pm = tok.slice(i).match(/^:([a-zA-Z-]+)(\(([^)]*)\))?/);
+      var pm = tok.slice(i).match(/^:([a-zA-Z-]+)/);
       if (!pm) return { error: "伪类无法解析: " + tok };
-      var name = pm[1];
-      var arg = pm[3] !== undefined ? pm[3] : null;
+      var name = pm[1], arg = null, consumed = pm[0].length;
+      if(tok[i+consumed]==="("){
+        var close=closingDelimiter(tok,i+consumed,"(",")");
+        if(close<0)return {error:"伪类参数未闭合: "+tok};
+        arg=tok.slice(i+consumed+1,close).trim();
+        consumed=close-i+1;
+      }
       var pr;
       switch (name) {
         case "eq":
-          var idx = parseInt(arg, 10);
-          if (isNaN(idx)) return { error: ":eq 参数非法: " + arg };
-          pr = String(idx + 1); // //div[1] 等价于 //div[position()=1]
+          var idx = Number(arg);
+          if (!/^-?\d+$/.test(arg || "")) return { error: ":eq 参数非法: " + arg };
+          pr = utils.indexToPosExpr(idx);
           break;
         case "gt":
-          var idx2 = parseInt(arg, 10);
-          if (isNaN(idx2)) return { error: ":gt 参数非法: " + arg };
-          pr = "position()>" + (idx2 + 1);
+          var idx2 = Number(arg);
+          if (!/^-?\d+$/.test(arg || "")) return { error: ":gt 参数非法: " + arg };
+          pr = "position()>(" + utils.indexToPosExpr(idx2) + ")";
           break;
         case "lt":
-          var idx3 = parseInt(arg, 10);
-          if (isNaN(idx3)) return { error: ":lt 参数非法: " + arg };
-          pr = "position()<" + (idx3 + 1);
+          var idx3 = Number(arg);
+          if (!/^-?\d+$/.test(arg || "")) return { error: ":lt 参数非法: " + arg };
+          pr = "position()<(" + utils.indexToPosExpr(idx3) + ")";
           break;
         case "first":
           pr = "1";
@@ -871,19 +925,16 @@ function parseCompound(tok, ctx, notes) {
           pr = "position()=last()";
           break;
         case "contains":
-          pr = 'contains(.,"' + escAttr(arg) + '")';
+          pr = "contains(.," + utils.xpathLiteral(decodeCssString(utils.unquote(arg || ""))) + ")";
           break;
         case "containsOwn":
-          pr = 'contains(text(),"' + escAttr(arg) + '")';
+          pr = "contains(text()," + utils.xpathLiteral(decodeCssString(utils.unquote(arg || ""))) + ")";
           break;
         default:
-          notes.push("伪类 :" + name + " 不支持，已忽略");
-          i += pm[0].length;
-          first = false;
-          continue;
+          return { error: "伪类 :" + name + " 不支持，不能安全忽略" };
       }
-      (pr === "1" || /^position()/.test(pr) || /^\d+$/.test(pr)) ? posPreds.push(pr) : preds.push(pr);
-      i += pm[0].length;
+      (pr === "1" || /^position\(\)/.test(pr) || /^last\(\)/.test(pr) || /^\d+$/.test(pr)) ? posPreds.push(pr) : preds.push(pr);
+      i += consumed;
       first = false;
       continue;
     }
@@ -906,24 +957,26 @@ function selectorToXpathChain(selector, ctx) {
   var comb = null; // null | ' ' | '>' | '+'
   var i = 0;
   var n = selector.length;
-  var step = 0;
+  var square=0, round=0, quote=null;
   while (i < n) {
-    var c = selector[i];
-    if (c === ">" || c === "+" || c === "~") {
-      if (buf) { tokens.push({ sel: buf, comb: comb }); buf = ""; }
-      else if (tokens.length) tokens[tokens.length - 1].comb = tokens[tokens.length - 1].comb || " ";
-      comb = c;
-      i++;
-      continue;
+    var c=selector[i];
+    if(quote){
+      buf+=c;
+      if(c==="\\" && i+1<n)buf+=selector[++i];
+      else if(c===quote)quote=null;
+      i++;continue;
     }
-    if (c === " " || c === "\t") {
-      if (buf) { tokens.push({ sel: buf, comb: comb }); buf = ""; comb = " "; }
-      i++;
-      continue;
+    if(c==="'"||c==='"'){quote=c;buf+=c;i++;continue;}
+    if(c==="[")square++;else if(c==="]")square--;
+    else if(c==="(")round++;else if(c===")")round--;
+    if(square===0&&round===0&&(c===">"||c==="+"||c==="~"||/\s/.test(c))){
+      if(buf){tokens.push({sel:buf,comb:comb});buf="";comb=" ";}
+      if(!/\s/.test(c))comb=c;
+      i++;continue;
     }
-    buf += c;
-    i++;
+    buf+=c;i++;
   }
+  if(quote||square!==0||round!==0)return {error:"CSS 引号或括号未闭合",notes:notes};
   if (buf) tokens.push({ sel: buf, comb: comb });
   if (!tokens.length) return { error: "空选择器", notes: notes };
 
@@ -939,9 +992,10 @@ function selectorToXpathChain(selector, ctx) {
     else if (comb2 === "+" || comb2 === "~") sep = "/following-sibling::";
     else sep = "//";
     if (comb2 === "+") {
-      // 相邻兄弟：取第一个匹配（保持旧行为）
-      var sibBody = (acc === null ? "" : acc) + sep + stepXp;
-      acc = "(" + sibBody + ")[1]";
+      // CSS + requires the immediate next element, not the next matching sibling.
+      var sibBody = acc + "/following-sibling::*[1][self::" + pc.tag + "]" +
+        (pc.preds.length ? "["+pc.preds.join(" and ")+"]" : "");
+      acc = pc.posPred ? "("+sibBody+")["+pc.posPred+"]" : sibBody;
       continue;
     }
     var body2 = (acc === null ? "" : acc) + sep + stepXp;
@@ -992,7 +1046,7 @@ function convertCss(rule, ctx) {
     xpath += m.xpath;
     notes = notes.concat(m.notes);
   }
-  return { xpath: xpath, notes: notes };
+  return { xpath: utils.scopeGroupedListXPath(xpath, ctx), notes: notes };
 }
 
 module.exports = {
@@ -1809,7 +1863,57 @@ function expandOptionalPrefix(urlStr) {
   return { url: out, maps: maps };
 }
 
+
+// Recognize only data-only GET grammar emitted by the converter. Never execute input.
+function describeStaticGetRequest(rule) {
+  if (typeof rule !== "string" || rule.length > 4000) return null;
+  var raw = rule.trim(), forbidCookie = false, generated = false;
+  if (/^@js:/i.test(raw)) {
+    var match = raw.match(/^@js:\s*(?:let|var|const)\s+url\s*=\s*`([^`\\]*)`;\s*return\s+\{\s*url:\s*url(?:,\s*forbidCookie:\s*(true|false))?\s*\};?\s*$/);
+    if (!match) return null;
+    raw = match[1]; forbidCookie = match[2] === "true"; generated = true;
+    raw = raw.replace(/\$\{params\.keyWord\}/g, "%@keyWord").replace(/\$\{params\.pageIndex\}/g, "%@pageIndex");
+  }
+  if (/@js:|<js>|\$\{|javascript:/i.test(raw)) return null;
+  if (!raw || /[\r\n`]/.test(raw)) return null;
+  return { url: raw, method: "GET", forbidCookie: forbidCookie, generated: generated };
+}
+
+// Rewrite only the literal origin of a statically recognized GET request.
+// Keep the generated request object, paging placeholders and cookie intent.
+function rewriteStaticGetOrigin(rule, oldOrigin, newOrigin) {
+  var request=describeStaticGetRequest(rule);
+  if(!request || typeof oldOrigin!=="string" || typeof newOrigin!=="string")return rule;
+  var authority=request.url.match(/^https?:\/\/[^/?#\s]+/i);
+  if(!authority)return rule;
+  try {
+    var before=new URL(authority[0]),target=new URL(newOrigin);
+    if(before.username||before.password||before.origin!==oldOrigin||
+       !/^https?:$/.test(target.protocol)||target.username||target.password||target.origin!==newOrigin)return rule;
+  }catch(e){return rule;}
+  return rule.replace(authority[0],newOrigin);
+}
+
+// Replace a verified static GET URL without discarding its request object.
+function rewriteStaticGetUrl(rule, nextUrl) {
+  var request=describeStaticGetRequest(rule);
+  if(!request || typeof nextUrl!=="string" || nextUrl.length>2200 ||
+      /[\r\n\x60\\]|\$\{|@js:|<js>/i.test(nextUrl))return null;
+  var unknown=nextUrl.replace(/%@(?:keyWord|pageIndex)/g,"");
+  if(unknown.includes("%@"))return null;
+  try{
+    var target=new URL(nextUrl);
+    if(!/^https?:$/.test(target.protocol)||target.username||target.password||target.hash)return null;
+  }catch(e){return null;}
+  if(!request.generated)return nextUrl;
+  var literal=nextUrl.replace(/%@keyWord/g,"$"+"{params.keyWord}").replace(/%@pageIndex/g,"$"+"{params.pageIndex}");
+  return rule.replace(/\x60[^\x60\\]*\x60/,function(){return String.fromCharCode(96)+literal+String.fromCharCode(96);});
+}
+
 module.exports = {
+  rewriteStaticGetUrl: rewriteStaticGetUrl,
+  describeStaticGetRequest: describeStaticGetRequest,
+  rewriteStaticGetOrigin: rewriteStaticGetOrigin,
   buildRequestInfo: buildRequestInfo,
   splitUrlOptions: splitUrlOptions,
   findTemplates: findTemplates,
@@ -1817,7 +1921,53 @@ module.exports = {
   CHARSET_MAP: CHARSET_MAP
 };
 
-
+};
+__mods['linkRule']=function(module,exports,require){
+"use strict";
+var utils=require("./utils");
+/* Portable URL normalization for known URL fields. No browser globals or eval. */
+function resolveHref(value, base) {
+  var u=String(value==null?"":value).trim();
+  if(!u)return "";
+  if(/^https?:\/\//i.test(u))return u;
+  if(/^[a-z][a-z0-9+.-]*:/i.test(u))return "";
+  var b=String(base||"").trim().replace(/#.*$/,"");
+  var match=b.match(/^(https?):\/\/[^/?#]+/i);
+  if(!match)return "";
+  var origin=match[0];
+  if(u.slice(0,2)==="//")return match[1]+":"+u;
+  if(u.charAt(0)==="#")return b+u;
+  b=b.replace(/\?.*$/,"");if(b===origin)b+="/";
+  if(u.charAt(0)==="?")return b+u;
+  var suffix=u.match(/[?#].*$/),tail=suffix?suffix[0]:"";
+  u=u.replace(/[?#].*$/,"");
+  var path=u.charAt(0)==="/"?u:b.slice(origin.length).replace(/\/[^/]*$/,"/")+u;
+  var parts=path.split("/"),stack=[];
+  for(var i=0;i<parts.length;i++){
+    var dot=parts[i].replace(/%2e/gi,".");
+    if(dot===".."){
+      if(stack.length>1)stack.pop();
+      if(i===parts.length-1)stack.push("");
+    }else if(dot==="."){
+      if(i===parts.length-1)stack.push("");
+    }else stack.push(parts[i]);
+  }
+  return origin+stack.join("/")+tail;
+}
+var RESOLVER_SCRIPT="return ("+resolveHref.toString()+")(result, String((typeof params!=='undefined'&&params.responseUrl)||(typeof config!=='undefined'&&config.host)||''));";
+function compileLinkRule(rule){
+  if(typeof rule!=="string"||!/^(\/|\.\/|\(|\$)/.test(rule.trim())||utils.splitTopLevel(rule,["||"]).length>1||/^@js:/.test(rule.trim()))return rule;
+  return rule+"||@js:\n"+RESOLVER_SCRIPT;
+}
+function describeLinkRule(rule){
+  if(typeof rule!=="string"||rule.length>14000)return null;
+  var marker="||@js:\n",index=rule.indexOf(marker);
+  if(index<=0||rule.slice(index+marker.length)!==RESOLVER_SCRIPT)return null;
+  var selector=rule.slice(0,index);
+  if(!/^(\/|\.\/|\(|\$)/.test(selector.trim()))return null;
+  return {selector:selector,normalization:"response-url"};
+}
+module.exports={resolveHref:resolveHref,compileLinkRule:compileLinkRule,describeLinkRule:describeLinkRule};
 
 };
 __mods['rules']=function(module,exports,require){
@@ -2459,8 +2609,6 @@ module.exports = {
   ensureReturn: ensureReturn
 };
 
-
-
 };
 __mods['modules']=function(module,exports,require){
 "use strict";
@@ -2471,6 +2619,7 @@ __mods['modules']=function(module,exports,require){
 
 var rules = require("./rules");
 var urlRule = require("./urlRule");
+var linkRule = require("./linkRule");
 var utils = require("./utils");
 
 // JSON 解析源检测：规则为 JSONPath（$.x / $.. / @json:）即整模块启用 JSON 解析
@@ -2549,15 +2698,18 @@ function embedPortableHelpers(value,ctx,warnings) {
   var body=value.slice(sep+4);
   var lib=String(ctx.src.jsLib);
   var declared=lib.match(/\bfunction\s+[A-Za-z_$][\w$]*\s*\(/g)||[];
-  var helpers=[];
-  for(var i=0;i<declared.length;i++){
-    var name=declared[i].replace(/^.*?function\s+/,'').replace(/\s*\($/,'');
-    if(new RegExp('\\b'+name+'\\s*\\\(').test(body) && !new RegExp('\\bfunction\\s+'+name+'\\s*\\\(').test(body)){
-      var definition=extractHelper(lib,name);
-      if(!definition){warnings.push({level:'degraded',msg:'jsLib 辅助函数 '+name+' 无法安全内联，请检查手动函数'});continue;}
-      helpers.push(definition);
-    }
+  var helpers=[],names=declared.map(function(d){return d.replace(/^.*?function\s+/,'').replace(/\s*\($/,'');}),seen={};
+  function called(code,name){var escaped=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');return new RegExp('(?:^|[^\\w$])'+escaped+'\\s*\\(').test(code);}
+  function add(name){
+    if(Object.prototype.hasOwnProperty.call(seen,name))return;
+    seen[name]=true;
+    var definition=extractHelper(lib,name);
+    if(!definition){warnings.push({level:'unsupported',msg:'jsLib 辅助函数 '+name+' 无法安全内联，保留诊断，不能认定为等价转换'});return;}
+    try{new Function(definition);}catch(e){warnings.push({level:'unsupported',msg:'jsLib 辅助函数 '+name+' 的静态语法检查失败'});return;}
+    names.forEach(function(dep){if(dep!==name&&called(definition,dep))add(dep);});
+    helpers.push(definition);
   }
+  names.forEach(function(name){if(called(body,name)&&!new RegExp('function\\s+'+name+'\\s*\\(').test(body))add(name);});
   if(helpers.length){
     warnings.push({level:'note',msg:'已将 jsLib 中 '+helpers.length+' 个实际使用的辅助函数内联到字段脚本，不再依赖 Legado 全局 jsLib'});
     return value.slice(0,sep+4)+'\n'+helpers.join('\n')+'\n'+body;
@@ -2595,6 +2747,15 @@ function pickFields(src, mapping, ctx) {
     }
     if (ctx.listChildFields && (xsggKey === "url" || xsggKey === "detailUrl") && (String(raw).trim() === "href" || (ctx.listItemIsAnchor && /^(?:a@href|tag\.a@href)$/.test(String(raw).trim())))) {
       convertedValue = "//@href";
+    }
+    if((ctx.listChildFields && xsggKey==='detailUrl'||xsggKey==='chapterListUrl') && typeof convertedValue==='string' && /\/@href$/.test(convertedValue) && convertedValue.indexOf('@js:')<0){
+      // Select the first element before extracting its attribute, and keep
+      // grouped generated XPath relative to the current card.
+      var hrefPath=convertedValue.match(/^(.+)\/@href$/);
+      if(hrefPath && convertedValue!=='//@href'){
+        convertedValue=utils.scopeGroupedListXPath('('+hrefPath[1]+')[1]/@href',fctx);
+      }
+      warnings.push({level:'degraded',msg:'详情/目录 URL 为单值字段，已限制首个匹配 href 防止拼接多条地址；所选链接仍需网页与 App 验证'});
     }
     out[xsggKey] = embedPortableHelpers(convertedValue,fctx,warnings);
     warnings = warnings.concat(r.warnings);
@@ -2634,7 +2795,7 @@ function buildSearchBook(src, ctx) {
   var ri = urlRule.buildRequestInfo(String(src.searchUrl), jctx, "search");
   warnings = warnings.concat(ri.warnings);
   var m = base("searchBook", jctx.host, jctx.jsonEnabled);
-  m.requestInfo = ri.requestInfo;
+  m.requestInfo = embedPortableHelpers(ri.requestInfo,jctx,warnings);
   Object.assign(m, ri.actionExtra || {});
   var searchFieldsCtx = Object.assign({}, jctx, { listChildFields: true, listItemIsAnchor: /(?:^|[@ >])(?:tag\.)?a(?:[.#\[][\w\W]*)?$/.test(String(rs.bookList || "")) });
   var p = pickFields(rs, [
@@ -2650,6 +2811,7 @@ function buildSearchBook(src, ctx) {
   ], searchFieldsCtx);
   Object.keys(p.out).forEach(function (k) { m[k] = p.out[k]; });
   warnings = warnings.concat(p.warnings);
+  m.detailUrl=absolutizeHref(m.detailUrl,jctx.host);
   applyRemoveHtmlKeys(m, p, warnings);
   // 搜索分页：URL 含 {{page}} 时按页号分页 → maxPage 兜底上限
   if (String(src.searchUrl).indexOf("{{page}}") !== -1) {
@@ -2671,11 +2833,9 @@ function buildBookDetail(src, ctx) {
   if (jctx.jsonEnabled) jsonNote(warnings);
   var m = base("bookDetail", jctx.host, jctx.jsonEnabled);
   // Keep explicit %@result instead of relying on implicit App state.
-  if (src.ruleBookInfo.tocUrl) {
-    warnings.push({ level: "degraded", msg: "详情页含目录 URL 规则(tocUrl)：XSGG 目录将沿用详情页 URL 解析；若目录页与详情页不同，请为 chapterList 手动配置 requestInfo" });
-  }
   var p = pickFields(src.ruleBookInfo, [
     ["name", "bookName"],
+    ["tocUrl", "chapterListUrl", { optional: true }],
     ["author", "author", { optional: true }],
     ["coverUrl", "cover", { optional: true }],
     ["intro", "desc", { optional: true }],
@@ -2685,6 +2845,11 @@ function buildBookDetail(src, ctx) {
   ], jctx);
   Object.keys(p.out).forEach(function (k) { m[k] = p.out[k]; });
   warnings = warnings.concat(p.warnings);
+  if(m.chapterListUrl){
+    m.chapterListUrl=linkRule.compileLinkRule(m.chapterListUrl);
+    warnings.push({level:/@js:|<js>|\{\{/.test(String(src.ruleBookInfo.tocUrl))?"unsupported":"note",
+      msg:"tocUrl 已映射为 chapterListUrl，由 %@result 传递到目录动作；动态后处理仍须验证，未猜测目录地址"});
+  }
   applyRemoveHtmlKeys(m, p, warnings);
   return { module: m, warnings: warnings };
 }
@@ -2692,28 +2857,8 @@ function buildBookDetail(src, ctx) {
 // A relative href must be resolved against the actual response page, not the site's homepage.
 // Only augment plain XPath attribute extraction, never override a custom Legado JS rule.
 function absolutizeHref(value, host) {
-  if (typeof value !== "string" || !/\/@href\s*$/.test(value) || value.indexOf("||@js:") >= 0 || value.indexOf("@js:") === 0) return value;
-  // iOS JavaScriptCore does not guarantee a global URL constructor.
-  // Use plain ECMAScript string operations to preserve XSGG compatibility.
-  return value + "||@js:\n" + [
-    "var u=String(result==null?'':result).trim();",
-    "if(!u)return '';",
-    "if(/^(https?:|data:|blob:)/i.test(u))return u;",
-    "var b=String((typeof params!=='undefined'&&params.responseUrl)||(typeof config!=='undefined'&&config.host)||'').replace(/[?#].*$/,'');",
-    "var m=b.match(/^(https?):\\/\\/[^/]+/i);if(!m)return u;",
-    "var origin=m[0];",
-    "if(u.slice(0,2)==='//')return m[1]+':'+u;",
-    "if(u.charAt(0)==='?')return b+u;",
-    "if(u.charAt(0)==='#')return b+u;",
-    "var path=u.charAt(0)==='/'?u:b.slice(origin.length).replace(/\\/[^/]*$/,'/')+u;",
-    "var parts=path.split('/'),stack=[];",
-    "for(var i=0;i<parts.length;i++){",
-    "if(parts[i]==='..'){if(stack.length>1)stack.pop();}",
-    "else if(parts[i]==='.'||parts[i]===''){if(i===0)stack.push('');}",
-    "else stack.push(parts[i]);",
-    "}",
-    "return origin+stack.join('/');"
-  ].join("\n");
+  if(typeof value!=="string"||!/\/@href\s*$/.test(value))return value;
+  return linkRule.compileLinkRule(value);
 }
 
 // chapterList
@@ -2726,7 +2871,7 @@ function buildChapterList(src, ctx) {
   if (jctx.jsonEnabled) jsonNote(warnings);
   var m = base("chapterList", jctx.host, jctx.jsonEnabled);
   // Always propagate upstream detail URL using the documented %@result placeholder.
-  var chapterFieldsCtx = Object.assign({}, jctx, { listChildFields: true, listItemIsAnchor: /(?:^|\s|>)a(?:\b|[.#\[])/.test(String(src.ruleToc.chapterList || "")) });
+  var chapterFieldsCtx = Object.assign({}, jctx, { listChildFields: true, listItemIsAnchor: /(?:^|[@ >])(?:tag\.)?a(?:[.#\[][\w\W]*)?$/.test(String(src.ruleToc.chapterList || "")) });
   var p = pickFields(src.ruleToc, [
     ["chapterList", "list"],
     ["chapterName", "title"],
@@ -3037,7 +3182,7 @@ function buildBookWorld(src, ctx) {
       var entry=base('bookWorld',ctx.host,staticCtx.jsonEnabled);
       for(var pk in pp.out)entry[pk]=pp.out[pk];
       var address=urlRule.buildRequestInfo(path,staticCtx,'explore');
-      if(address.requestInfo){entry.requestInfo=address.requestInfo;}
+      if(address.requestInfo){entry.requestInfo=embedPortableHelpers(address.requestInfo,staticCtx,warnings);}
       else {warnings.push({level:'unsupported',msg:'分类 '+key+' 缺少合法 URL，已跳过'});continue;}
       entry._sIndex=Object.keys(staticMap).length;
       entry.moreKeys={pageSize:20};
@@ -3296,8 +3441,6 @@ module.exports = {
   buildBookWorld: buildBookWorld
 };
 
-
-
 };
 __mods['formatCompat']=function(module,exports,require){
 "use strict";
@@ -3395,8 +3538,6 @@ function normalize(doc, options) {
 }
 module.exports = { normalize: normalize };
 
-
-
 };
 __mods['siteAdapters']=function(module,exports,require){
 "use strict";
@@ -3405,6 +3546,9 @@ __mods['siteAdapters']=function(module,exports,require){
 // Preserve working chapterContent rules and do not change manually customized catalog actions.
 function patchCuocengCatalog(source, warnings) {
   if (!/^https?:\/\/m\.cuoceng\.(?:com|org)(?:\/|$)/i.test(String(source.sourceUrl || ""))) return;
+  // An explicit catalog link keeps the original source semantics and takes priority.
+  if (source.bookDetail && typeof source.bookDetail.chapterListUrl === "string" &&
+      source.bookDetail.chapterListUrl.trim()) return;
   var catalog = source.chapterList;
   if (!catalog || typeof catalog !== "object" || catalog.requestInfo !== "%@result" ||
       !/allchapter/i.test(String(catalog.list || ""))) return;
@@ -3432,6 +3576,7 @@ __mods['domainRewrite']=function(module,exports,require){
 /** Apply a *verified* permanent domain move to URL-bearing fields only.
  * Never rewrite arbitrary XPath/HTML, source names, user headers or CDN hosts.
  */
+var urlRule=require("./urlRule");
 function canonicalOrigin(raw) {
   try {
     var url=new URL(String(raw||'').trim());
@@ -3440,23 +3585,12 @@ function canonicalOrigin(raw) {
   }catch(e){return null;}
 }
 function replaceOrigin(text, oldOrigin, newOrigin) {
-  if(typeof text!=='string'||!oldOrigin)return text;
-  var cursor=0,out='';
-  while(cursor<text.length) {
-    var at=text.indexOf(oldOrigin,cursor);
-    if(at<0){out+=text.slice(cursor);break;}
-    var next=text.charAt(at+oldOrigin.length);
-    var prev=text.charAt(at-1);
-    // Only match exact URL authorities (not old.tld.evil or credentials).
-    var follows=!next || '/?# \t\r\n"\'\x60;)}>,'.includes(next);
-    if(follows && next!=='@' && prev!=='@'){
-      out+=text.slice(cursor,at)+newOrigin;
-    }else{
-      out+=text.slice(cursor,at+oldOrigin.length);
-    }
-    cursor=at+oldOrigin.length;
-  }
-  return out;
+  if(typeof text!=='string'||!oldOrigin||!newOrigin)return text;
+  // Only replace the leading authority. Query values, tokens and nested URLs
+  // are data and must remain byte-for-byte unchanged.
+  var authority=text.match(/^https?:\/\/[^/?#\s]+/i);
+  if(!authority||canonicalOrigin(authority[0])!==oldOrigin)return text;
+  return newOrigin+text.slice(authority[0].length);
 }
 function rewriteTrustedHeaders(h, oldOrigin, newOrigin, changes, path){
   if(!h||typeof h!=='object'||Array.isArray(h))return;
@@ -3471,8 +3605,8 @@ function rewriteModuleFields(module, oldOrigin,newOrigin,changes,path){
   var fields=['host','requestInfo','url','detailUrl','chapterListUrl','nextPageUrl','cover'];
   for(var i=0;i<fields.length;i++){
     var field=fields[i],before=module[field];
-    if(typeof before!=='string' || !/^https?:\/\//i.test(before))continue;
-    var after=replaceOrigin(before,oldOrigin,newOrigin);
+    if(typeof before!=='string')continue;
+    var after=field==="requestInfo" ? urlRule.rewriteStaticGetOrigin(before,oldOrigin,newOrigin) : /^https?:\/\//i.test(before) ? replaceOrigin(before,oldOrigin,newOrigin) : before;
     if(after!==before){
       module[field]=after;
       changes.push({path:path+'.'+field,oldValue:before,newValue:after});
@@ -3490,7 +3624,7 @@ function applyVerifiedDomainMove(source, verifiedMove) {
     return {source:source,changes:[],applied:false};
   }
   var allModules=['searchBook','bookDetail','chapterList','chapterContent'].map(function(k){return source[k];}).concat(Object.values(source.bookWorld||{}));
-  if(allModules.some(function(m){return m && Object.keys(m).some(function(k){return typeof m[k]==='string' && m[k].indexOf('@js:')>=0 && m[k].indexOf(oldOrigin)>=0;});})){
+  if(allModules.some(function(m){return m && Object.keys(m).some(function(k){return typeof m[k]==='string' && m[k].indexOf('@js:')>=0 && m[k].toLowerCase().indexOf(oldOrigin.toLowerCase())>=0 && !(k==='requestInfo' && urlRule.describeStaticGetRequest(m[k]));});})){
     return {source:source,changes:[],applied:false,needsReview:true,reason:'动态脚本包含旧域名，不能用字符串替换修改 Cookie/Token 或代码文本；需字段级候选与复测'};
   }
   var result=JSON.parse(JSON.stringify(source)),changes=[];
@@ -3813,9 +3947,7 @@ function convertAll(source, options) {
   return { output: out, warnings: warnings, failures: failures, count: arr.length, okCount: okCount, sourceResults:sourceResults };
 }
 
-module.exports = { convert: convert, convertAll: convertAll, applyVerifiedDomainMove: domainRewrite.applyVerifiedDomainMove };
-
-
+module.exports = { convert: convert, convertAll: convertAll, applyVerifiedDomainMove: domainRewrite.applyVerifiedDomainMove, describeStaticGetRequest: require("./urlRule").describeStaticGetRequest };
 
 };
 window.ConverterLib=__req('index');

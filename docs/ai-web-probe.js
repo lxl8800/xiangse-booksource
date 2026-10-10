@@ -107,8 +107,10 @@
     var sourceMap={};sourceMap[name]=source;
     return {source:sourceMap,sourceName:name,legado:originalLegado(name),keyword:(el('aiProbeKeyword').value||'斗破苍穹').trim().slice(0,50)};
   }
+  var lastEvidence=null;
   function show(evidence){
     if(!evidence || typeof evidence!=='object')return;
+    lastEvidence=evidence;
     var view=el('aiWebEvidence'),list=el('aiWebEvidenceSteps');
     if(!view || !list)return;
     list.textContent='';
@@ -130,13 +132,23 @@
       if(step.elapsedMs)message+=(message?' · ':'')+'耗时 '+step.elapsedMs+'ms';
       if(message)item.appendChild(stringElement('div',message,'ai-web-step-text'));
       var evidenceLines=[];
-      if(step.url)evidenceLines.push('请求：'+step.url);
+      if(step.originalUrl)evidenceLines.push('原始地址：'+step.originalUrl);
+      if(step.url)evidenceLines.push((step.reusedResponse?'复用详情响应：':'请求：'+(step.requestMethod||'GET')+' ')+step.url);
+      if(step.handoff)evidenceLines.push('地址传递：'+step.handoff.from+(step.handoff.value?' → '+step.handoff.value:''));
       if(step.kind)evidenceLines.push('响应类型：'+step.kind+'，响应字节：'+(step.bytes||0));
-      (step.redirects||[]).forEach(function(x){evidenceLines.push('重定向 HTTP '+x.status+'：'+x.from+' → '+x.to);});
+      if(step.charset)evidenceLines.push('字符编码：'+step.charset+'（'+(step.charsetSource||'响应声明')+'）');
+      if(step.bodyTruncated||step.extractionTruncated)evidenceLines.push('内容受到检测预算限制，不能据此认定完整验证。');
+      (step.redirects||[]).forEach(function(x){evidenceLines.push('重定向 HTTP '+x.status+'：'+(x.url||x.from)+' → '+(x.location||x.to)+'；耗时 '+(x.elapsedMs||0)+'ms'+(x.reason?'；'+x.reason:''));});
       (step.searchAttempts||[]).forEach(function(x){evidenceLines.push('尝试：'+(x.httpStatus?'HTTP '+x.httpStatus:x.status)+' '+(x.url||'')+' '+(x.reason||''));});
       if(step.discoveredSearch)evidenceLines.push('自动发现搜索表单：'+step.discoveredSearch.action+' ? '+step.discoveredSearch.parameter+'=关键词');
       if(step.autoDiscovered)evidenceLines.push('自动发现可匹配选择器：'+JSON.stringify(step.autoDiscovered));
-      (step.fieldChecks||[]).forEach(function(x){evidenceLines.push('字段 '+x.field+'：'+x.status+'，匹配 '+(x.matches??'?')+' 条；'+(x.note||'')+'；规则 '+x.rule);});
+      (step.fieldChecks||[]).forEach(function(x){
+        evidenceLines.push('字段 '+x.field+'：'+x.status+'，匹配 '+(x.matches??'?')+' 条；'+(x.note||'')+'；规则 '+x.rule);
+        if(x.normalization==='response-url')evidenceLines.push('  相对地址按该页最终响应 URL 解析（已识别转换器规则）。');
+        (x.contexts||[]).forEach(function(row){
+          evidenceLines.push('  '+(x.context==='list-node'?'列表条目 '+(row.index+1):'页面')+'：匹配 '+row.matches+'；样例 '+JSON.stringify(row.samples||[])+(row.resolvedUrls?.length?'；解析地址 '+JSON.stringify(row.resolvedUrls):''));
+        });
+      });
       if(step.htmlPreview)evidenceLines.push('HTML DOM 片段（已裁剪）：'+step.htmlPreview);
       if(step.textPreview)evidenceLines.push('文本片段（已裁剪）：'+step.textPreview);
       if(evidenceLines.length){
@@ -156,7 +168,7 @@
     (evidence.steps||[]).forEach(function(step){
       if(step.status!=='ok' && step.status!=='skipped')problems.push((steps[step.step]||step.step)+'：'+(step.reason||step.status));
       (step.fieldChecks||[]).forEach(function(check){
-        if(check.status==='invalid'||check.status==='no-results'||check.status==='scope-warning')
+        if(['invalid','no-results','scope-warning','partial-match','missing','multiple-values','partially-checked','not-checked'].includes(check.status))
           problems.push((steps[step.step]||step.step)+'.'+check.field+'：'+(check.note||check.status));
       });
     });
@@ -221,9 +233,17 @@
     }catch(error){status(error?.message||'加载测试书源失败',true);}
     finally{button.disabled=false;}
   }
+  function downloadEvidence(){
+    if(!lastEvidence)return;
+    var blob=new Blob([JSON.stringify(lastEvidence,null,2)],{type:'application/json;charset=utf-8'});
+    var url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download='booksource-evidence.json';document.body.appendChild(link);
+    link.click();link.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  }
   function ready(){
     if(!el('aiSiteProbe'))return;
     el('aiSiteProbe').addEventListener('click',checkSite);
+    el('webEvidenceDownload')?.addEventListener('click',downloadEvidence);
     var editor=el('input');
     editor?.addEventListener('input',function(){
       clearTimeout(autofillTimer);
@@ -235,7 +255,7 @@
     });
     el('aiLoadTianxiaExample')?.addEventListener('click',loadTestExample);
     el('aiLoadThreeExamples')?.addEventListener('click',loadThreeExamples);
-    el('aiReadSources')?.addEventListener('click',function(){if(el('aiWebEvidence'))el('aiWebEvidence').hidden=true;});
+    el('aiReadSources')?.addEventListener('click',function(){lastEvidence=null;if(el('aiWebEvidence'))el('aiWebEvidence').hidden=true;});
   }
   window.BooksourceWebProbe={params:params,show:show,check:checkSite,prepareInput:visibleSource,loadExample:loadTestExample,parseMixed:makeMergedOutput,originalLegado:originalLegado};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ready);else ready();

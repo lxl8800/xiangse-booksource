@@ -297,4 +297,4 @@ function convertAll(source, options) {
   return { output: out, warnings: warnings, failures: failures, count: arr.length, okCount: okCount, sourceResults:sourceResults };
 }
 
-module.exports = { convert: convert, convertAll: convertAll, applyVerifiedDomainMove: domainRewrite.applyVerifiedDomainMove };
+module.exports = { convert: convert, convertAll: convertAll, applyVerifiedDomainMove: domainRewrite.applyVerifiedDomainMove, describeStaticGetRequest: require("./urlRule").describeStaticGetRequest };

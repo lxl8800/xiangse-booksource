@@ -279,8 +279,8 @@ footer span { font-size: 10px; }
     </div>
   </div>
 <div class="card ai-repair-card" id="aiRepairCard">
-  <h2>AI 辅助修复</h2>
-  <p class="ai-repair-intro">先让服务器真实访问小说网站，依次检测搜索、详情、目录和正文，再让你自己的 AI 根据网页结果分析失败原因。遇到站点超时或反爬会如实显示；修复候选仍需你手动确认。</p>
+  <h2>网站检测与自动修复</h2>
+  <p class="ai-repair-intro">无需 API Key，即可检测搜索、详情、目录和正文，并查看字段样例与修改差异。检测会区分格式通过、网页验证及受限规则；自动修复候选经再次检测后供你确认，也可选择自己的 AI 进一步分析。</p>
   <div class="ai-repair-grid">
     <div><label for="aiRepairSource">需要修复的书源</label><select id="aiRepairSource"><option value="">先读取当前转换结果</option></select></div>
     <button type="button" class="ai-action secondary" id="aiReadSources">读取当前书源</button>
@@ -306,9 +306,10 @@ footer span { font-size: 10px; }
     <h3>真实 HTTP / 网页解析检测</h3>
     <p id="aiWebEvidenceIntro">服务器读取网站搜索、详情、目录和正文的真实 HTTP 结果。</p>
     <div id="aiWebEvidenceSteps" class="ai-web-steps"></div>
+    <button type="button" class="ai-action secondary" id="webEvidenceDownload">下载检测报告 JSON</button>
     <div id="aiWebEvidenceNotes" class="ai-repair-notice" style="white-space:pre-wrap"></div>
   </div>
-  <div id="aiRepairStatus" class="ai-repair-status">可以先点击「检测网站」（无需 API Key）；使用「联网检测并让 AI 修复」前，请在右上角设置自己的模型。</div>
+  <div id="aiRepairStatus" class="ai-repair-status">可以直接检测网站、自动修复并复测，无需 API Key。候选规则仍需香色闺阁 App 实测。</div>
   <div id="aiRepairResult" class="ai-repair-result" hidden>
     <h3>自动修复 / AI 修改建议</h3>
     <p id="aiRepairSummary"></p>

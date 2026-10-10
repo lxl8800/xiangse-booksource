@@ -6,6 +6,7 @@
 
 var rules = require("./rules");
 var urlRule = require("./urlRule");
+var linkRule = require("./linkRule");
 var utils = require("./utils");
 
 // JSON 解析源检测：规则为 JSONPath（$.x / $.. / @json:）即整模块启用 JSON 解析
@@ -134,9 +135,14 @@ function pickFields(src, mapping, ctx) {
     if (ctx.listChildFields && (xsggKey === "url" || xsggKey === "detailUrl") && (String(raw).trim() === "href" || (ctx.listItemIsAnchor && /^(?:a@href|tag\.a@href)$/.test(String(raw).trim())))) {
       convertedValue = "//@href";
     }
-    if(ctx.listChildFields && xsggKey==='detailUrl' && typeof convertedValue==='string' && /\/@href$/.test(convertedValue) && convertedValue.indexOf('@js:')<0){
-      convertedValue='('+convertedValue+')[1]';
-      warnings.push({level:'degraded',msg:'列表详情 URL 为单值字段，已限制首个匹配 href 防止拼接多条地址；所选链接仍需网页与 App 验证'});
+    if((ctx.listChildFields && xsggKey==='detailUrl'||xsggKey==='chapterListUrl') && typeof convertedValue==='string' && /\/@href$/.test(convertedValue) && convertedValue.indexOf('@js:')<0){
+      // Select the first element before extracting its attribute, and keep
+      // grouped generated XPath relative to the current card.
+      var hrefPath=convertedValue.match(/^(.+)\/@href$/);
+      if(hrefPath && convertedValue!=='//@href'){
+        convertedValue=utils.scopeGroupedListXPath('('+hrefPath[1]+')[1]/@href',fctx);
+      }
+      warnings.push({level:'degraded',msg:'详情/目录 URL 为单值字段，已限制首个匹配 href 防止拼接多条地址；所选链接仍需网页与 App 验证'});
     }
     out[xsggKey] = embedPortableHelpers(convertedValue,fctx,warnings);
     warnings = warnings.concat(r.warnings);
@@ -192,6 +198,7 @@ function buildSearchBook(src, ctx) {
   ], searchFieldsCtx);
   Object.keys(p.out).forEach(function (k) { m[k] = p.out[k]; });
   warnings = warnings.concat(p.warnings);
+  m.detailUrl=absolutizeHref(m.detailUrl,jctx.host);
   applyRemoveHtmlKeys(m, p, warnings);
   // 搜索分页：URL 含 {{page}} 时按页号分页 → maxPage 兜底上限
   if (String(src.searchUrl).indexOf("{{page}}") !== -1) {
@@ -213,11 +220,9 @@ function buildBookDetail(src, ctx) {
   if (jctx.jsonEnabled) jsonNote(warnings);
   var m = base("bookDetail", jctx.host, jctx.jsonEnabled);
   // Keep explicit %@result instead of relying on implicit App state.
-  if (src.ruleBookInfo.tocUrl) {
-    warnings.push({ level: "unsupported", msg: "详情页含独立目录 tocUrl，当前引擎尚未证明等价传递；不得把沿用详情 URL 的输出认定为可用，需真实目录证据" });
-  }
   var p = pickFields(src.ruleBookInfo, [
     ["name", "bookName"],
+    ["tocUrl", "chapterListUrl", { optional: true }],
     ["author", "author", { optional: true }],
     ["coverUrl", "cover", { optional: true }],
     ["intro", "desc", { optional: true }],
@@ -227,6 +232,11 @@ function buildBookDetail(src, ctx) {
   ], jctx);
   Object.keys(p.out).forEach(function (k) { m[k] = p.out[k]; });
   warnings = warnings.concat(p.warnings);
+  if(m.chapterListUrl){
+    m.chapterListUrl=linkRule.compileLinkRule(m.chapterListUrl);
+    warnings.push({level:/@js:|<js>|\{\{/.test(String(src.ruleBookInfo.tocUrl))?"unsupported":"note",
+      msg:"tocUrl 已映射为 chapterListUrl，由 %@result 传递到目录动作；动态后处理仍须验证，未猜测目录地址"});
+  }
   applyRemoveHtmlKeys(m, p, warnings);
   return { module: m, warnings: warnings };
 }
@@ -234,30 +244,8 @@ function buildBookDetail(src, ctx) {
 // A relative href must be resolved against the actual response page, not the site's homepage.
 // Only augment plain XPath attribute extraction, never override a custom Legado JS rule.
 function absolutizeHref(value, host) {
-  if (typeof value !== "string" || !/\/@href\s*$/.test(value) || value.indexOf("||@js:") >= 0 || value.indexOf("@js:") === 0) return value;
-  // iOS JavaScriptCore does not guarantee a global URL constructor.
-  // Use plain ECMAScript string operations to preserve XSGG compatibility.
-  return value + "||@js:\n" + [
-    "var u=String(result==null?'':result).trim();",
-    "if(!u)return '';",
-    "if(/^(https?:|data:|blob:)/i.test(u))return u;",
-    "var b=String((typeof params!=='undefined'&&params.responseUrl)||(typeof config!=='undefined'&&config.host)||'').replace(/[?#].*$/,'');",
-    "var m=b.match(/^(https?):\\/\\/[^/]+/i);if(!m)return u;",
-    "var origin=m[0];if(b===origin)b+='/';",
-    "if(u.slice(0,2)==='//')return m[1]+':'+u;",
-    "if(u.charAt(0)==='?')return b+u;",
-    "if(u.charAt(0)==='#')return b+u;",
-    "var suffix=u.match(/[?#].*$/),tail=suffix?suffix[0]:'';u=u.replace(/[?#].*$/,'');",
-    "var path=u.charAt(0)==='/'?u:b.slice(origin.length).replace(/\\/[^/]*$/,'/')+u;",
-    "var parts=path.split('/'),stack=[];",
-    "for(var i=0;i<parts.length;i++){",
-    "if(parts[i]==='..'){if(stack.length>1)stack.pop();}",
-    "else if(parts[i]==='.'||parts[i]===''){if(i===0)stack.push('');}",
-    "else stack.push(parts[i]);",
-    "}",
-    "var normalized=stack.join('/');if(path.slice(-1)==='/'&&normalized.slice(-1)!=='/')normalized+='/';",
-    "return origin+normalized+(typeof tail!=='undefined'?tail:'');"
-  ].join("\n");
+  if(typeof value!=="string"||!/\/@href\s*$/.test(value))return value;
+  return linkRule.compileLinkRule(value);
 }
 
 // chapterList

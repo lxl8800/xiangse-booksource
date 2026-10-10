@@ -5,10 +5,11 @@ app
 build
 tests
 tools
-converter
 releases
 test-data
 LOCAL-DEPLOY.md
 *.md
 !README.md
 !LICENSE
+
+reports

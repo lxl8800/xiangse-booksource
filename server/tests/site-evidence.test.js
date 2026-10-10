@@ -25,7 +25,7 @@ const fakeFetch=async url=>{
 };
 
 test('given Legado source converts id.main@li!0 into valid XPath',()=>{
-  assert.equal(converted['⚡📂笔趣阁'].searchBook.list,'(//*[contains(@id,"main")]//li)[not(position()=1)]');
+  assert.equal(converted['⚡📂笔趣阁'].searchBook.list,'(//*[@id="main"]//li)[not(position()=1)]');
 });
 
 test('real request pipeline on synthetic web pages validates all four reading stages',async()=>{
@@ -58,7 +58,7 @@ test('network failure is reported as failed search, never asserts later pages wo
 
 test('HTTP 403 and wrong XPath show honest diagnostic',async()=>{
   const broken=structuredClone(source);
-  broken.source['⚡📂笔趣阁'].searchBook.list='//*[contains(@id,"main")]/@li!0';
+  broken.source['⚡📂笔趣阁'].searchBook.list='//*[@id="main"]/@li!0';
   const mock=async url=>new Response(new URL(url).pathname==='/'?'<h1>home</h1>':'blocked',{status:new URL(url).pathname==='/'?200:403,headers:{'content-type':'text/html'}});
   const report=await inspectSourceWeb(broken,{fetcher:mock,dnsChecker:dns});
   assert.equal(report.steps[1].status,'blocked');

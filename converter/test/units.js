@@ -25,11 +25,11 @@ test("Default: class. 类型与位置", function () {
 });
 test("Default: #id 后代链", function () {
   eq(defaultRule.convertDefault("#fmimg img@data-original", BASE).xpath,
-     '//*[contains(@id,"fmimg")]//img/@data-original');
+     '//*[@id="fmimg"]//img/@data-original');
 });
 test("Default: :contains 中文", function () {
   eq(defaultRule.convertDefault("#info p:contains(作者)@text", BASE).xpath,
-     '//*[contains(@id,"info")]//p[contains(.,"作者")]//text()');
+     '//*[@id="info"]//p[contains(.,"作者")]//text()');
 });
 test("Default: CSS 式裸选择器 + 属性", function () {
   eq(defaultRule.convertDefault("meta[property=og:image]@content", BASE).xpath,
@@ -52,13 +52,13 @@ test("Default: 排除索引不得生成恒为假的 not(1)", function () {
 test("Default: html/all 按书源类型分流", function () {
   // 小说正文输出 DOM 容器节点，适配 XSGG 内容选择器（非碎片化 //text()）
   eq(defaultRule.convertDefault("id.booktxt@html", { field: "content", src: {} }).xpath,
-     '//*[contains(@id,"booktxt")]');
+     '//*[@id="booktxt"]');
   eq(defaultRule.convertDefault("id.booktxt@textNodes", { field: "content", src: {} }).xpath,
-     '//*[contains(@id,"booktxt")]');
+     '//*[@id="booktxt"]');
   eq(defaultRule.convertDefault("id.booktxt@text", { field: "content", src: {} }).xpath,
-     '//*[contains(@id,"booktxt")]');
+     '//*[@id="booktxt"]');
   eq(defaultRule.convertDefault("id.booktxt@text", { field: "author", src: {} }).xpath,
-     '//*[contains(@id,"booktxt")]//text()');
+     '//*[@id="booktxt"]//text()');
   // 漫画源：显式取图 @src + 提示懒加载需人工核对
   var r2 = defaultRule.convertDefault("class.lazy@all", { field: "content", src: { bookSourceType: 2 } });
   eq(r2.xpath, "//*[contains(concat(' ', normalize-space(@class), ' '), ' lazy ')]//img/@src");
@@ -173,11 +173,11 @@ test("modules: 全模块组装", function () {
   var sb = modules.buildSearchBook(ctx.src, ctx);
   eq(sb.module.requestInfo, "https://x.com/s?k=%@keyWord");
   eq(sb.module.list, "//*[contains(concat(' ', normalize-space(@class), ' '), ' item ')]");
-  eq(sb.module.detailUrl, "(//a/@href)[1]");
+  eq(require("../lib/linkRule").describeLinkRule(sb.module.detailUrl).selector, "(descendant::a)[1]/@href");
   var toc = modules.buildChapterList(ctx.src, ctx);
-  eq(toc.module.list, '//*[contains(@id,"list")]//dd');
+  eq(toc.module.list, '//*[@id="list"]//dd');
   var cc = modules.buildChapterContent(ctx.src, ctx);
-  eq(cc.module.content, '//*[contains(@id,"ct")]');
+  eq(cc.module.content, '//*[@id="ct"]');
 });
 test("modules: bookWorld _type 模式", function () {
   var ctx = { src: mkSrc(), host: "https://x.com", jsonEnabled: false };
@@ -188,9 +188,9 @@ test("modules: bookWorld _type 模式", function () {
   eq(run({filter:'wx',pageIndex:2}), 'https://x.com/wx/2.html');
   eq(run({pageIndex:1}), 'https://x.com/xh/1.html');
   eq(bw[key].moreKeys.requestFilters, "_type\n玄幻::xh\n武侠::wx");
-  eq(bw[key].bookName, "(//a)[1]/@title");
-  eq(bw[key].wordCount, "(//em)[1]//text()");
-  eq(bw[key].lastChapterTitle, "(//em)[2]//text()");
+  eq(bw[key].bookName, "(descendant::a)[1]/@title");
+  eq(bw[key].wordCount, "(descendant::em)[1]//text()");
+  eq(bw[key].lastChapterTitle, "(descendant::em)[2]//text()");
 });
 test("modules: bookWorld 逐行模式（格式二数组 + 分页拼接）", function () {
   var ctx = { src: mkSrc({ exploreUrl: "玄幻::/xh/{{page}}.html\n武侠::https://y.com/wx/{{page}}.html" }), host: "https://x.com", jsonEnabled: false };
@@ -380,7 +380,7 @@ test("urlRule: 请求上下文 baseUrl 按角色映射", function () {
 
 test("Default: 最末段 li!0 必须作为排除首项的节点选择器", function () {
   var xp = defaultRule.convertDefault("id.main@li!0", BASE).xpath;
-  eq(xp, '(//*[contains(@id,"main")]//li)[not(position()=1)]');
+  eq(xp, '(//*[@id="main"]//li)[not(position()=1)]');
   var converted = converter.convert({
     bookSourceName: "⚡📂笔趣阁", bookSourceUrl: "https://www.tianxiabachang.cn",
     searchUrl: "https://www.tianxiabachang.cn/cse/search?q={{key}}&s=",

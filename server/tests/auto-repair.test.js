@@ -56,7 +56,7 @@ test('no-key auto repair fills verified rules and succeeds only after retesting 
  assert(result.candidate.chapterContent.content.includes('article'));
 });
 
-test('301 apex to www is safe; source repair converts script URL and book-relative detail XPath',async()=>{
+test('301 apex to www preserves working core selectors, helpers and request semantics',async()=>{
  const fake=async(href)=>{
   const u=new URL(href);
   if(u.hostname==='suduguu.com')
@@ -74,10 +74,13 @@ test('301 apex to www is safe; source repair converts script URL and book-relati
  assert.equal(result.verification.httpChainVerified,true);
  assert(result.verification.steps.some(s=>s.fieldChecks?.some(f=>f.status==='partially-checked')));
  assert.equal(result.candidate.sourceUrl,'https://www.suduguu.com');
- assert.equal(result.candidate.searchBook.detailUrl,'.//h3/a/@href');
- assert.equal(result.candidate.searchBook.bookName,'.//h3/a/text()');
- assert.equal(result.candidate.searchBook.cover,'.//img/@src');
- assert.equal(result.candidate.searchBook.requestInfo,'https://www.suduguu.com/i/sor.aspx?key=%@keyWord');
+ assert.equal(result.candidate.searchBook.detailUrl,source['速读谷'].searchBook.detailUrl);
+ assert.equal(result.candidate.searchBook.bookName,source['速读谷'].searchBook.bookName);
+ assert.equal(result.candidate.searchBook.cover,source['速读谷'].searchBook.cover);
+ assert(result.candidate.searchBook.requestInfo.includes('https://www.suduguu.com/i/sor.aspx?key='));
+ assert(result.candidate.searchBook.requestInfo.includes('forbidCookie: true'));
+ assert(result.candidate.searchBook.requestInfo.startsWith('@js:'));
+ assert.equal(result.candidate.chapterList.url,source['速读谷'].chapterList.url,'preserve relative URL resolver');
  assert.equal(result.verification.steps[2].url,'https://www.suduguu.com/448/');
 });
 
@@ -89,4 +92,16 @@ test('do not guess repairs when lemon search hostname times out',async()=>{
  assert.equal(result.candidate,null);
  assert.equal(result.accepted.length,0);
  assert.equal(result.liveWebEvidence.steps[1].status,'timeout');
+});
+
+test('HTML card inference supports actual h4 titles and candidate rules are independently re-tested',async()=>{
+ const fetcher=async uri=>{
+  const response=await myshuFake(uri);
+  if(new URL(uri).pathname!=='/search.php')return response;
+  return ok((await response.text()).replaceAll('<h3>','<h4>').replaceAll('</h3>','</h4>'));
+ };
+ const result=await runAutoRepair({source:myshu,sourceName:'天天小书屋',keyword:'测试小说'},{webInspector:engine(fetcher)});
+ assert.equal(result.verified,true);
+ assert(result.candidate.searchBook.list.includes('self::h4'));
+ assert(result.candidate.searchBook.bookName.includes('self::h4'));
 });

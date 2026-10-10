@@ -4,6 +4,9 @@
 // Preserve working chapterContent rules and do not change manually customized catalog actions.
 function patchCuocengCatalog(source, warnings) {
   if (!/^https?:\/\/m\.cuoceng\.(?:com|org)(?:\/|$)/i.test(String(source.sourceUrl || ""))) return;
+  // An explicit catalog link keeps the original source semantics and takes priority.
+  if (source.bookDetail && typeof source.bookDetail.chapterListUrl === "string" &&
+      source.bookDetail.chapterListUrl.trim()) return;
   var catalog = source.chapterList;
   if (!catalog || typeof catalog !== "object" || catalog.requestInfo !== "%@result" ||
       !/allchapter/i.test(String(catalog.list || ""))) return;

@@ -5,7 +5,7 @@ const vm=require('node:vm');
 const {JSDOM}=require('jsdom');
 const htmlOriginal=fs.readFileSync('docs/index.html','utf8');
 const bundle=fs.readFileSync('docs/converter.bundle.js','utf8');
-const html=htmlOriginal.replace('<script src="./converter.bundle.js"></script>','<script>'+bundle+'</script>');
+const html=htmlOriginal.replace('<script src="./converter.bundle.js"></script>',()=>'<script>'+bundle+'</script>');
 const updates=JSON.parse(fs.readFileSync('docs/updates.json','utf8'));
 async function run(){
  const errors=[];

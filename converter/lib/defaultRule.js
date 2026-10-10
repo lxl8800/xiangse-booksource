@@ -358,13 +358,13 @@ function parseSegment(seg, ctx) {
       xp = "//*[contains(concat(' ', normalize-space(@class), ' '), ' " + escAttr(name) + " ')]";
       break;
     case "id":
-      xp = '//*[contains(@id,"' + escAttr(name) + '")]';
+      xp = "//*[@id=" + utils.xpathLiteral(name) + "]";
       break;
     case "tag":
       xp = "//" + name;
       break;
     case "text":
-      xp = '//*[contains(text(),"' + escAttr(name) + '")]';
+      xp = "//*[contains(text()," + utils.xpathLiteral(name) + ")]";
       break;
     case "rel":
       // rel.xxx：标签 rel + class 条件（WordPress 常见 <a rel=...> 场景按标签+类处理）
@@ -377,7 +377,7 @@ function parseSegment(seg, ctx) {
   var preds = [];
   var idxParts = [];
   if (containsText !== null) {
-    preds.push('contains(text(),"' + escAttr(containsText) + '")');
+    preds.push("contains(text()," + utils.xpathLiteral(utils.unquote(containsText)) + ")");
   }
   if (tagPreds) preds = preds.concat(tagPreds);
   if (position !== null) idxParts.push(indexToPosExpr(position));
@@ -451,7 +451,7 @@ function convertDefault(rule, ctx) {
   if (acc === null || acc === "") {
     return { error: "空规则", notes: notes };
   }
-  return { xpath: acc, notes: notes };
+  return { xpath: utils.scopeGroupedListXPath(acc, ctx), notes: notes };
 }
 
 module.exports = {

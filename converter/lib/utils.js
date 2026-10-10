@@ -230,7 +230,26 @@ function resolveUrl(rel, base) {
   }
 }
 
+// XSGG scopes a leading // to its current list item. Parenthesized XPath
+// does not receive that treatment. Scope generated grouped expressions with
+// explicit relative axes, preserving global position within each list item.
+function scopeGroupedListXPath(xpath, ctx) {
+  if(!ctx || !ctx.listChildFields || typeof xpath!=="string" || xpath.trim().charAt(0)!=="(")return xpath;
+  var out="",quote=null,prev="";
+  for(var i=0;i<xpath.length;i++){
+    var c=xpath[i];
+    if(quote){out+=c;if(c===quote)quote=null;continue;}
+    if(c==="'" || c==='"'){quote=c;out+=c;continue;}
+    if(c==="/" && xpath[i+1]==="/" && (!prev || prev==="(" || prev==="|")){
+      out+=xpath[i+2]==="@" ? "descendant-or-self::*/" : "descendant::";i++;prev="/";continue;
+    }
+    out+=c;if(!/\s/.test(c))prev=c;
+  }
+  return out;
+}
+
 module.exports = {
+  scopeGroupedListXPath: scopeGroupedListXPath,
   topLevelPositions: topLevelPositions,
   splitTopLevel: splitTopLevel,
   findCleanup: findCleanup,

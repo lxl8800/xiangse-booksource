@@ -7,10 +7,14 @@
  * protection, no redirect following, strict time/byte/step budgets.
  */
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
+const { describeStaticGetRequest } = createRequire(import.meta.url)('../converter/lib/urlRule.js');
+const {resolveHref,describeLinkRule}=createRequire(import.meta.url)('../converter/lib/linkRule.js');
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { checkPublicDns, makeSafeFetch } from './net-safety.js';
+import {redactUrl, splitXPathPipeline, nodeText, sanitizeEvidence} from './evidence-report.js';
 
 const allowedFile = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data/site-allowlist.json');
 const builtInHosts = new Set(JSON.parse(fs.readFileSync(allowedFile,'utf8')));
@@ -19,7 +23,6 @@ const permittedHosts = new Set([...builtInHosts,...localAdditionalHosts]);
 const MAX_HTML_BYTES = 280_000;
 const MAX_DOCUMENT_LENGTH = 280_000;
 const MAX_KEYWORD_LENGTH = 50;
-const MAX_STEPS = 4;
 const USER_AGENT = 'BooksourceWorkbench-Checker/1.0 (+read-only-validation)';
 
 function safeTarget(href, origin) {
@@ -74,20 +77,53 @@ function searchRequest(legado, source, keyword) {
     return {url:substituted};
   }
   const requestInfo=source?.searchBook?.requestInfo;
-  if(typeof requestInfo==='string' && /^\/?(?:https?:\/\/|[^@\s]*\/)/.test(requestInfo.trim()) && !requestInfo.includes('@js:')) {
-    const req=requestInfo.trim().replace(/%@keyWord/g,encodeURIComponent(keyword)).replace(/%@pageIndex/g,'1');
-    if(!req.includes('%@'))return {url:req};
+  const descriptor=describeStaticGetRequest(requestInfo);
+  if(descriptor && /^\/?(?:https?:\/\/|[^@\s]*\/)/.test(descriptor.url)) {
+    const req=descriptor.url.replace(/%@keyWord/g,encodeURIComponent(keyword)).replace(/%@pageIndex/g,'1');
+    if(!req.includes('%@'))return {url:req,staticRequest:descriptor.generated?'converter-get-template':'plain-get',forbidCookie:descriptor.forbidCookie};
   }
   return {reason:'此书源搜索 URL 需要执行 App 侧动态 JS（安全起见不在服务器执行）'};
 }
 
+function actionRequest(action,seed,origin,keyword){
+  const rule=action?.requestInfo;
+  const missing=typeof rule!=='string'||!rule.trim();
+  const descriptor=missing?{url:'%@result'}:describeStaticGetRequest(rule);
+  if(!descriptor)return {reason:'requestInfo 为无法静态识别的动态请求；不执行脚本，也不沿用其他动作的地址'};
+  let template=descriptor.url;
+  const usedResult=template.includes('%@result');
+  if(usedResult&&!seed)return {reason:'请求依赖上一动作的 URL，但未取得一个有效的地址'};
+  template=template.replace(/%@result/g,()=>seed||'').replace(/%@keyWord/g,()=>encodeURIComponent(keyword)).replace(/%@pageIndex/g,'1');
+  if(template.includes('%@'))return {reason:'请求包含无法静态展开的占位符'};
+  try{
+    const resolved=new URL(template,action?.host||origin);
+    return {url:resolved.href,requestInfoMissing:missing,usedResult,
+      staticRequest:descriptor.generated?'converter-get-template':'plain-get',forbidCookie:!!descriptor.forbidCookie};
+  }catch{return {reason:'动作请求无法解析为一个 URL'};}
+}
+function evaluateField(doc,context,rule,count=3){
+  const known=describeLinkRule(rule);
+  const parsed=splitXPathPipeline(rule);
+  const selected=evaluateXpath(doc,context,known?.selector||parsed.xpath,count);
+  const values=selected.nodes.map(nodeText);
+  return {...selected,values:known?values.map(value=>resolveHref(value,doc.URL)):values,
+    postprocessUnchecked:parsed.postprocess&&!known,normalization:known?.normalization};
+}
+function catalogSeed(doc,rule){
+  const field=evaluateField(doc,doc,rule,2);
+  if(field.postprocessUnchecked)return {reason:'目录地址使用未验证的 JS 后处理；静态检测不能将选择器原值替代脚本结果',status:'unsupported'};
+  if(field.reason)return {reason:field.reason,status:'unsupported'};
+  const total=field.total??field.nodes.length;
+  if(total!==1||!field.values[0])return {reason:total>1?'目录地址规则匹配多个 URL，不能拼接或任意选取':'目录地址规则未取得有效链接',status:'no-results'};
+  try{return {url:new URL(field.values[0],doc.URL).href};}
+  catch{return {reason:'目录地址不是有效 URL',status:'unsupported'};}
+}
 function decodeKind(response) {
   const ct=(response.headers?.get?.('content-type') || '').toLowerCase();
   if (ct.includes('json')) return 'json';
   if (ct.includes('html') || ct.includes('text/plain') || !ct) return 'html';
   return 'unknown';
 }
-function redactUrl(raw){try{const u=new URL(raw);for(const k of [...u.searchParams.keys()])if(/token|api[_-]?key|secret|password|cookie|auth|signature|session/i.test(k))u.searchParams.set(k,"[redacted]");return u.href;}catch{return "[invalid URL]";}}
 function tiny(s,max=180){return String(s??'').replace(/\s+/g,' ').trim().slice(0,max);}
 function safeTextSnippet(doc) { return tiny(doc?.body?.textContent,700); }
 function discoverSearchForm(doc, baseUrl, keyword) {
@@ -96,59 +132,78 @@ function discoverSearchForm(doc, baseUrl, keyword) {
   for(const form of Array.from(doc.querySelectorAll('form')).slice(0,10)){
     const method=(form.getAttribute('method')||'get').trim().toUpperCase();
     if(method!=='GET')continue; // POST requires separate authorization/CSRF work.
-    const inputs=Array.from(form.querySelectorAll('input[name]'));
-    const field=inputs.find(i=>likely.includes(i.getAttribute('name').toLowerCase()));
+    const inputs=Array.from(form.querySelectorAll('input[name]')).filter(i=>!i.disabled);
+    if(inputs.length>20)continue;
+    const field=inputs.find(i=>likely.includes(i.getAttribute('name').toLowerCase())&&!['hidden','password','checkbox','radio','submit','button','file'].includes(i.type));
     if(!field)continue;
     try {
       const target=new URL(form.getAttribute('action')||baseUrl,baseUrl);
       if(!['http:','https:'].includes(target.protocol))continue;
       safeTarget(target.href,new URL(baseUrl).origin);
+      if([...target.searchParams.keys()].some(k=>/token|secret|password|cookie|auth|session|signature|api[_-]?key/i.test(k)))continue;
+      const hidden=inputs.filter(i=>i!==field&&(i.getAttribute('type')||'').toLowerCase()==='hidden');
+      if(hidden.some(i=>/token|secret|password|cookie|auth|session|signature|api[_-]?key/i.test(i.name)||i.value.length>160||/%@|\{\{/.test(i.value)))continue;
+      for(const input of hidden)target.searchParams.append(input.name,input.value);
       target.searchParams.set(field.getAttribute('name'),keyword);
-      const checked=target.href;
-      return {url:checked,method,parameter:field.getAttribute('name'),action:target.pathname,source:'网页搜索框 form[action] input[name]'};
+      safeTarget(target.href,new URL(baseUrl).origin);
+      const parameter=field.getAttribute('name');
+      const query=[...target.searchParams].map(([key,value])=>encodeURIComponent(key)+'='+(key===parameter?'%@keyWord':encodeURIComponent(value))).join('&');
+      return {url:target.href,requestTemplate:target.origin+target.pathname+'?'+query,
+        method,parameter:field.getAttribute('name'),action:target.pathname,hiddenParameters:hidden.map(i=>i.name),
+        source:'网页搜索框 form[action] input[name]'};
     }catch{continue;}
   }
   return null;
 }
-function nonEmptyXpath(doc,context,expr){
-  const evaluated=evaluateXpath(doc,context,expr,100);
-  return {rule:expr,matches:evaluated.total??evaluated.nodes?.length??0,reason:evaluated.reason||null};
-}
-function actualSourceFieldChecks(source, doc, module, sampleNode){
+function actualSourceFieldChecks(source, doc, module, sampleNodes=[]){
   const fields={
     searchBook:['list','bookName','detailUrl','cover','author'],
-    bookDetail:['bookName','title','author','desc','cover'],
+    bookDetail:['bookName','title','author','desc','cover','chapterListUrl'],
     chapterList:['list','title','url'],
     chapterContent:['content']
   }[module]||[];
+  const required={searchBook:['list','bookName','detailUrl'],chapterList:['list','title','url'],chapterContent:['content']}[module]||[];
   const rows=[];
   for(const field of fields){
     const value=source?.[module]?.[field];
-    if(typeof value!=='string'||!value.trim())continue;
+    if(typeof value!=='string'||!value.trim()){
+      if(required.includes(field))rows.push({field,rule:'',status:'missing',matches:0,note:'缺少读取链所需字段'});
+      continue;
+    }
     const entry={field,rule:value.slice(0,240)};
-    if(sampleNode && field!=='list' && value.trim().startsWith('//')){
-      entry.note='按香色列表子字段上下文模拟 //；官方 App 仍需实测';
+    const {xpath,postprocess}=splitXPathPipeline(value);
+    const known=describeLinkRule(value);
+    if(!/^(\/|\(|\.\/)/.test(xpath)){
+      rows.push({...entry,status:'not-checked',note:'动态脚本或 JSONPath，无法按 DOM XPath 验证'});continue;
     }
-    if(value.includes('||') || value.includes('@js:')){
-      entry.status='partially-checked';
-      entry.note='只检查静态选择器，JS 后处理需在 App 中验证';
-    }
-    const first=value.split('||')[0].trim();
-    if(!first.startsWith('/')&&!first.startsWith('(')&&!first.startsWith('.//')&&!first.startsWith('./')){
-      entry.status='not-checked';entry.note='动态脚本或 JSONPath，无法按 DOM XPath 验证';
-    }else{
-      const check=nonEmptyXpath(doc,field==='list'?doc:(sampleNode||doc),first);
-      entry.matches=check.matches;
-      if(check.reason){entry.status='invalid';entry.note=check.reason;}
-      else if(check.matches===0){entry.status='no-results';entry.note='真实页面中未匹配节点';}
-      else if(!entry.status)entry.status='ok';
-    }
+    const contexts=field==='list'||!sampleNodes.length?[doc]:sampleNodes.slice(0,3);
+    const checks=contexts.map((context,index)=>{
+      const evaluated=evaluateField(doc,context,value,3);
+      const row={index,matches:evaluated.total??evaluated.nodes.length,
+        samples:evaluated.values.map(value=>tiny(value,field==='content'?32:80))};
+      if(['detailUrl','url','cover','chapterListUrl'].includes(field))
+        row.resolvedUrls=evaluated.values.map(value=>redactUrl(value,doc.URL)).slice(0,3);
+      if(evaluated.reason)row.error=evaluated.reason;
+      return row;
+    });
+    entry.matches=checks[0].matches;
+    entry.contexts=checks;
+    entry.samples=checks[0].samples;
+    entry.context=contexts[0]===doc?'document':'list-node';
+    if(known)entry.normalization=known.normalization;
+    if(checks.some(x=>x.error)){entry.status='invalid';entry.note=checks.find(x=>x.error).error;}
+    else if(checks.every(x=>x.matches===0)){entry.status='no-results';entry.note='真实页面中未匹配节点';}
+    else if(field!=='list'&&checks.every(x=>!x.samples.some(Boolean))){entry.status='no-results';entry.note='匹配节点但提取值为空';}
+    else if(checks.some(x=>x.matches===0||field!=='list'&&!x.samples.some(Boolean))){entry.status='partial-match';entry.note='部分列表条目未匹配字段或提取值为空，需核对规则与空值';}
+    else if(['detailUrl','url','chapterListUrl'].includes(field)&&checks.some(x=>x.matches>1)){entry.status='multiple-values';entry.note='URL 为单值字段，多个匹配不能证明地址传递正确';}
+    else if(postprocess&&!known){entry.status='partially-checked';entry.note='仅验证静态选择器，JS 后处理或后续规则未执行';}
+    else entry.status='ok';
     rows.push(entry);
   }
   return rows;
 }
 function recordSearchAttempt(result, reason){
-  return {url:result.url||null,httpStatus:result.httpStatus||null,status:result.status,bytes:result.bytes||0,elapsedMs:result.elapsedMs||0,reason:result.reason||reason||'',redirects:result.redirects||[]};
+  return {url:result.url?redactUrl(result.url):null,requestMethod:result.requestMethod||'GET',httpStatus:result.httpStatus||null,status:result.status,bytes:result.bytes||0,elapsedMs:result.elapsedMs||0,reason:result.reason||reason||'',redirects:result.redirects||[]};
 }
 function makeSummary(evidence){
   const flags=[];
@@ -161,13 +216,13 @@ function makeSummary(evidence){
 function inferSearchCards(doc) {
   const candidates=[
     {css:'.item',xpath:"//*[contains(concat(' ',normalize-space(@class),' '),' item ')]"},
-    {css:'div.col-md-6 > dl',xpath:"//div[contains(concat(' ',normalize-space(@class),' '),' col-md-6 ')]/dl[.//h3/a]"},
+    {css:'div.col-md-6 > dl',xpath:"//div[contains(concat(' ',normalize-space(@class),' '),' col-md-6 ')]/dl[.//*[self::h3 or self::h4]/a]"},
     {css:'.bookbox',xpath:"//*[contains(concat(' ',normalize-space(@class),' '),' bookbox ')]"},
     {css:'.result-item',xpath:"//*[contains(concat(' ',normalize-space(@class),' '),' result-item ')]"}
   ];
   for(const c of candidates){
     const nodes=Array.from(doc.querySelectorAll(c.css)).filter(n=>n.querySelector('h3 a[href],h4 a[href]'));
-    if(nodes.length) return {nodes,xpath:c.xpath,bookName:'.//h3/a/text()',detailUrl:'.//h3/a/@href',count:nodes.length};
+    if(nodes.length) return {nodes,xpath:c.xpath,bookName:'//*[self::h3 or self::h4]/a/text()',detailUrl:'//*[self::h3 or self::h4]/a/@href',count:nodes.length};
   }
   return null;
 }
@@ -208,10 +263,10 @@ function htmlStructure(doc) {
 }
 function evaluateXpath(doc, context, expr, count=50) {
   if(typeof expr!=='string'||!expr.trim() || expr.trim().startsWith('@js:'))return {nodes:[],reason:'包含 JS，静态验证不执行'};
-  const pipeline=expr.includes('||@js:');
-  if(pipeline)expr=expr.split('||@js:')[0].trim();
+  const parsed=splitXPathPipeline(expr),pipeline=parsed.postprocess;
+  expr=parsed.xpath;
   try {
-    if(context && context!==doc) expr=expr.replace(/(^|[|(]\s*)\/\//g,"$1.//");
+    if(context && context!==doc && expr.startsWith("//")) expr="."+expr;
     const snap=doc.evaluate(expr,context||doc,null,doc.defaultView.XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null);
     const nodes=[];
     for(let i=0;i<Math.min(snap.snapshotLength,count);i++)nodes.push(snap.snapshotItem(i));
@@ -267,28 +322,39 @@ async function downloadSite(url, origin, { fetcher, dnsChecker=checkPublicDns, t
   const started=Date.now();
   const timer=setTimeout(()=>ctl.abort(),timeoutMs);
   const redirects=[];
+  const initialUrl=safe.href;
+  let responseInfo={};
   try {
-    let response;
+    let response,responseElapsedMs=0;
     for(let i=0;i<3;i++){
+      const hopStarted=Date.now();
       await dnsChecker(safe);
       response=await (fetcher || makeSafeFetch(safe.origin,{allowHttp:true,allowRedirectResponse:true}))(safe.href,{
         method:'GET',signal:ctl.signal,redirect:'manual',
         headers:{'User-Agent':USER_AGENT,Accept:'text/html,application/xhtml+xml,application/json;q=0.8,*/*;q=0.4'}
       });
+      responseElapsedMs=Date.now()-hopStarted;
       if(response.status>=300 && response.status<400){
         const location=response.headers?.get?.('location');
-        if(!location || i>=2){await response.body?.cancel();return {url:safe.href,redirects,status:'redirect',httpStatus:response.status,reason:'重定向次数超出限制或缺少 Location'};}
-        let next;
-        try{next=safeTarget(new URL(location,safe.href).href,origin);}
-        catch(error){await response.body?.cancel();return {url:safe.href,redirects,status:'redirect',httpStatus:response.status,reason:'不安全重定向：'+tiny(error.message)};}
-        redirects.push({from:safe.origin,to:next.origin,url:redactUrl(safe.href),location:redactUrl(next.href),status:response.status,elapsedMs:Date.now()-started});
+        let next,reason;
+        try{
+          if(!location)throw new Error('重定向缺少 Location');
+          next=safeTarget(new URL(location,safe.href).href,origin);
+        }catch(error){reason='不安全重定向：'+tiny(error.message);}
+        let target;
+        try{target=location?new URL(location,safe.href):null;}catch{}
+        redirects.push({from:safe.origin,to:target?.origin||null,url:redactUrl(safe.href),
+          location:target?redactUrl(target.href):null,status:response.status,elapsedMs:responseElapsedMs,
+          ...(reason?{reason}:{})});
         await response.body?.cancel();
-        safe=next;
-        continue;
+        if(reason||i>=2)return {url:safe.href,originalUrl:initialUrl,requestMethod:'GET',redirects,
+          elapsedMs:Date.now()-started,status:'redirect',httpStatus:response.status,
+          reason:reason||'重定向次数超出限制'};
+        safe=next;continue;
       }
       break;
     }
-    const result={url:safe.href,redirects,elapsedMs:Date.now()-started,httpStatus:response.status,kind:decodeKind(response)};
+    const result=responseInfo={responseElapsedMs,url:safe.href,originalUrl:initialUrl,requestMethod:'GET',redirects,elapsedMs:Date.now()-started,httpStatus:response.status,kind:decodeKind(response),contentType:tiny(response.headers?.get?.('content-type'),160)};
     if(response.status<200||response.status>=300){await response.body?.cancel();return {...result,status:response.status===403?'blocked':'http-error',reason:'网站响应 HTTP '+response.status};}
     const reportedSize=Number(response.headers?.get?.('content-length') || 0);
     if(reportedSize>maxBytes){await response.body?.cancel();return {...result,status:'unsupported',reason:'响应内容超出安全检测的 HTML 大小限制'};}
@@ -297,23 +363,33 @@ async function downloadSite(url, origin, { fetcher, dnsChecker=checkPublicDns, t
       const reader=response.body.getReader();
       try {while(true){const next=await reader.read();if(next.done)break;size+=next.value.byteLength;if(size>maxBytes){await reader.cancel();return {...result,status:'unsupported',reason:'响应内容过大，超过 '+maxBytes+' 字节'};}chunks.push(next.value);}}finally{try{reader.releaseLock();}catch{}}
     } else if(response.text){const bytes=new TextEncoder().encode(await response.text());size=bytes.length;if(size>maxBytes)return {...result,status:'unsupported',reason:'响应过大'};chunks.push(bytes);}
-    const charset=String(response.headers?.get?.('content-type')||'').match(/charset\s*=\s*["']?([\w-]+)/i)?.[1]||'utf-8';
-    const body=new TextDecoder(charset,{fatal:false}).decode(Buffer.concat(chunks.map(x=>Buffer.from(x))));
-    return {...result,status:'ok',elapsedMs:Date.now()-started,charset,bytes:size,body:body.slice(0,MAX_DOCUMENT_LENGTH)};
+    const bytes=Buffer.concat(chunks.map(x=>Buffer.from(x)));
+    const headerCharset=String(response.headers?.get?.('content-type')||'').match(/charset\s*=\s*["']?([\w-]+)/i)?.[1];
+    const metas=bytes.subarray(0,4096).toString('latin1').match(/<meta\b[^>]*>/gi)||[];
+    const metaCharset=metas.map(x=>x.match(/charset\s*=\s*["']?([\w-]+)/i)?.[1]).find(Boolean);
+    const requestedCharset=headerCharset||metaCharset||'utf-8';
+    let decoder;
+    try{decoder=new TextDecoder(requestedCharset,{fatal:false});}
+    catch{return {...result,status:'unsupported',bytes:size,charset:requestedCharset,reason:'当前解码器不支持响应字符编码 '+tiny(requestedCharset,40)};}
+    const body=decoder.decode(bytes);
+    return {...result,status:'ok',elapsedMs:Date.now()-started,charset:decoder.encoding,
+      charsetSource:headerCharset?'content-type':metaCharset?'html-meta':'default',
+      bytes:size,bodyTruncated:body.length>MAX_DOCUMENT_LENGTH,body:body.slice(0,MAX_DOCUMENT_LENGTH)};
   }catch(error){
     const msg=String(error?.message||'');
-    return {url:safe.href,elapsedMs:Date.now()-started,status:ctl.signal.aborted||/timeout|timed out|UND_ERR_CONNECT_TIMEOUT/i.test(msg)?'timeout':'network-error',reason:ctl.signal.aborted?'连接超过 '+timeoutMs+'ms':tiny(msg,180)};
+    return {...responseInfo,url:safe.href,originalUrl:initialUrl,requestMethod:'GET',redirects,elapsedMs:Date.now()-started,status:ctl.signal.aborted||/timeout|timed out|UND_ERR_CONNECT_TIMEOUT/i.test(msg)?'timeout':'network-error',reason:ctl.signal.aborted?'连接超过 '+timeoutMs+'ms':tiny(msg,180)};
   }finally{clearTimeout(timer);}
 }
 
 function reportStep(type,result) {
   const {body,...publicResult}=result;
   if(publicResult.url)publicResult.url=redactUrl(publicResult.url);
+  if(publicResult.originalUrl)publicResult.originalUrl=redactUrl(publicResult.originalUrl);
   return {step:type,...publicResult};
 }
 function skipStep(step,reason){return {step,status:'skipped',reason};}
 
-export async function inspectSourceWeb(input,{fetcher,dnsChecker=checkPublicDns,timeoutMs=7800}={}) {
+async function inspectSourceWebRaw(input,{fetcher,dnsChecker=checkPublicDns,timeoutMs=7800}={}) {
   const source=selectedXsgg(input?.source,input?.sourceName);
   const legado=selectedLegado(input?.legado)||selectedLegado(input?.source);
   if(!source && !legado)throw new Error('请先提供 Legado 或 XSGG 书源');
@@ -348,6 +424,8 @@ export async function inspectSourceWeb(input,{fetcher,dnsChecker=checkPublicDns,
   steps.push(reportStep('homepage',home));
   const searchStep=reportStep('search',searchResult);
   searchStep.searchAttempts=searchAttempts;
+  searchStep.recoveredRequest=searchAttempts.length>1&&searchResult.status==='ok';
+  if(configuredSearch.staticRequest)searchStep.staticRequest=configuredSearch.staticRequest;
   if(discoveredForm)searchStep.discoveredSearch=discoveredForm;
   if(source){
     const emptyDoc=new JSDOM('<!doctype html><html><body></body></html>').window.document;
@@ -386,7 +464,7 @@ export async function inspectSourceWeb(input,{fetcher,dnsChecker=checkPublicDns,
   let found=!source && legado?.ruleSearch?.bookList
     ?{nodes:legadoSelect(doc,legado.ruleSearch.bookList,30)}
     :evaluateXpath(doc,doc,source?.searchBook?.list,30);
-  const configuredMatches=found.nodes?.length||0;
+  const configuredMatches=found.total??found.nodes?.length??0;
   if(!configuredMatches){
     const inferred=inferSearchCards(doc);
     if(inferred){
@@ -396,10 +474,11 @@ export async function inspectSourceWeb(input,{fetcher,dnsChecker=checkPublicDns,
     }
   }
   searchStep.configuredMatches=configuredMatches;
-  searchStep.count=found.nodes?.length||0;
+  searchStep.count=found.total??found.nodes?.length??0;
+  searchStep.sampledCount=found.nodes?.length||0;
   if(found.reason)diagnostics.push('搜索选择器：'+found.reason);
   if(source?.searchBook){
-    searchStep.fieldChecks=actualSourceFieldChecks(source,doc,'searchBook',(found.nodes||[])[0]);
+    searchStep.fieldChecks=actualSourceFieldChecks(source,doc,'searchBook',found.nodes||[]);
   }
   if(source?.searchBook?.list){
     const check=evaluateXpath(doc,doc,source.searchBook.list,30);
@@ -415,7 +494,7 @@ export async function inspectSourceWeb(input,{fetcher,dnsChecker=checkPublicDns,
       :tiny(evaluateXpath(doc,n,source?.searchBook?.bookName,2).nodes?.[0]?.textContent||n.textContent,100);
     const candidate=!source && legado?fieldValue(doc,n,legado.ruleSearch?.bookUrl)
       :inferredSearch?n.querySelector('h3 a,h4 a')?.getAttribute('href')
-      :evaluateXpath(doc,n,source?.searchBook?.detailUrl,2).nodes?.[0]?.nodeValue;
+      :evaluateField(doc,n,source?.searchBook?.detailUrl,2).values?.[0];
     if(title)examples.push({title:tiny(title,100),detailUrl:tiny(candidate,240)});
     if(!bookUrl && candidate)bookUrl=candidate;
     if(examples.length>=3)break;
@@ -430,11 +509,16 @@ export async function inspectSourceWeb(input,{fetcher,dnsChecker=checkPublicDns,
   }
   steps.push(searchStep);
   let detailUrl;
-  try{detailUrl=safeTarget(new URL(bookUrl,searchResult.url).href,origin).href;}
+  let selectedBookUrl,detailRequest;
+  try{selectedBookUrl=new URL(bookUrl,searchResult.url).href;
+    detailRequest=source?actionRequest(source.bookDetail,selectedBookUrl,origin,keyword):{url:selectedBookUrl};
+    if(!detailRequest.url)throw Error(detailRequest.reason);detailUrl=safeTarget(detailRequest.url,origin).href;}
   catch(err){steps.push({step:'detail',status:'unsupported',reason:tiny(err.message)});steps.push(skipStep('chapterList','详情地址不被允许'));steps.push(skipStep('chapterContent','详情地址不被允许'));return {sourceName:source?.sourceName||'书源',site:origin,keyword,verifiedAt:new Date().toISOString(),steps,diagnostics,fullyVerified:false,depth:'live-static-dom'};}
   const detail=await downloadSite(detailUrl,origin,{fetcher,dnsChecker,timeoutMs});
-  const detailStep=reportStep('detail',detail);
+  const detailStep={...reportStep('detail',detail),requestInfoMissing:!!detailRequest.requestInfoMissing,
+    handoff:{from:detailRequest.usedResult===false?'bookDetail.requestInfo':'searchBook.detailUrl',value:redactUrl(detailRequest.usedResult===false?detailRequest.url:selectedBookUrl)}};
   if(detail.status!=='ok'||detail.kind!=='html'){
+    if(detail.status==='ok'){detailStep.status='unsupported';detailStep.reason='详情响应不是 HTML，当前静态 DOM 检测不解析 '+detail.kind;}
     steps.push(detailStep);
     steps.push(skipStep('chapterList','详情页面请求失败'));steps.push(skipStep('chapterContent','详情页面请求失败'));
     return {sourceName:source?.sourceName||legado?.bookSourceName||'书源',site:origin,keyword,verifiedAt:new Date().toISOString(),steps,diagnostics,fullyVerified:false,depth:'live-static-dom'};
@@ -444,46 +528,71 @@ export async function inspectSourceWeb(input,{fetcher,dnsChecker=checkPublicDns,
   detailStep.htmlPreview=htmlStructure(detailDoc);
   if(source?.bookDetail)detailStep.fieldChecks=actualSourceFieldChecks(source,detailDoc,'bookDetail');
   steps.push(detailStep);
-  // For these static Legado formats, TOC usually lives on the detail page.
-  // Dynamic toc URLs (requestInfo=@js:) are deliberately not executed.
+  const declaredCatalog=source?.bookDetail?.chapterListUrl;
+  const seed=declaredCatalog?catalogSeed(detailDoc,declaredCatalog):{url:detail.url};
+  const tocRequest=source?actionRequest(source.chapterList,seed.url,origin,keyword):{url:seed.url};
+  if(!tocRequest.url){
+    steps.push({step:'chapterList',status:seed.status||'unsupported',reason:seed.reason||tocRequest.reason});
+    steps.push(skipStep('chapterContent','目录地址未验证，不推断后续正文'));
+    return {sourceName:source?.sourceName||legado?.bookSourceName||'书源',site:origin,keyword,verifiedAt:new Date().toISOString(),steps,diagnostics,fullyVerified:false,depth:'live-static-dom'};
+  }
+  let toc;
+  try{
+    const target=safeTarget(tocRequest.url,origin).href;
+    toc=target===detail.url?detail:await downloadSite(target,origin,{fetcher,dnsChecker,timeoutMs});
+  }catch(error){toc={status:'unsupported',reason:tiny(error.message)};}
+  const tocRequestStep={...reportStep('chapterList',toc),requestInfoMissing:!!tocRequest.requestInfoMissing,
+    reusedResponse:toc===detail,handoff:{from:tocRequest.usedResult===false?'chapterList.requestInfo':declaredCatalog?'bookDetail.chapterListUrl':'bookDetail.responseUrl',
+      ...(tocRequest.usedResult===false?{value:redactUrl(tocRequest.url)}:seed.url?{value:redactUrl(seed.url)}:{})}};
+  if(toc.status!=='ok'||toc.kind!=='html'){
+    if(toc.status==='ok'){tocRequestStep.status='unsupported';tocRequestStep.reason='目录响应不是 HTML，当前静态 DOM 检测不解析 '+toc.kind;}
+    steps.push(tocRequestStep);
+    steps.push(skipStep('chapterContent','目录页面未取得可解析 HTML，正文不可验证'));
+    return {sourceName:source?.sourceName||legado?.bookSourceName||'书源',site:origin,keyword,verifiedAt:new Date().toISOString(),steps,diagnostics,fullyVerified:false,depth:'live-static-dom'};
+  }
+  const tocDoc=toc===detail?detailDoc:new JSDOM(toc.body,{url:toc.url}).window.document;
   let tocFound=!source && legado?.ruleToc?.chapterList
-    ?{nodes:legadoSelect(detailDoc,legado.ruleToc.chapterList,80)}
-    :evaluateXpath(detailDoc,detailDoc,source?.chapterList?.list,80);
+    ?{nodes:legadoSelect(tocDoc,legado.ruleToc.chapterList,80)}
+    :evaluateXpath(tocDoc,tocDoc,source?.chapterList?.list,80);
   let inferredToc;
-  const configuredTocMatches=tocFound.nodes?.length||0;
+  const configuredTocMatches=tocFound.total??tocFound.nodes?.length??0;
   if(!configuredTocMatches){
-    inferredToc=inferTocNodes(detailDoc);
+    inferredToc=inferTocNodes(tocDoc);
     if(inferredToc){
       tocFound={nodes:inferredToc.nodes.slice(0,80),total:inferredToc.nodes.length};
-      diagnostics.push('原书源目录规则匹配 0 条；从真实详情网页找到 '+inferredToc.nodes.length+' 个章节链接，建议更新 chapterList.list');
+      diagnostics.push('原书源目录规则匹配 0 条；从真实目录网页找到 '+inferredToc.nodes.length+' 个章节链接，建议更新 chapterList.list');
     }
   }
   let chapterUrl='';const chapters=[];
   for(const n of tocFound.nodes||[]){
-    const title=!source && legado?fieldValue(detailDoc,n,legado.ruleToc?.chapterName):tiny(n.textContent,100);
-    const candidate=!source && legado?fieldValue(detailDoc,n,legado.ruleToc?.chapterUrl):inferredToc?n.getAttribute?.('href')||'':evaluateXpath(detailDoc,n,source?.chapterList?.url,2).nodes?.[0]?.nodeValue||'';
+    const title=!source && legado?fieldValue(tocDoc,n,legado.ruleToc?.chapterName):inferredToc?tiny(n.textContent,100):tiny(nodeText(evaluateXpath(tocDoc,n,source?.chapterList?.title,2).nodes?.[0]),100);
+    const candidate=!source && legado?fieldValue(tocDoc,n,legado.ruleToc?.chapterUrl):inferredToc?n.getAttribute?.('href')||'':evaluateField(tocDoc,n,source?.chapterList?.url,2).values?.[0]||'';
     if(title)chapters.push({title:tiny(title,100),url:tiny(candidate,240)});
     if(!chapterUrl&&candidate)chapterUrl=candidate;
     if(chapters.length>=3)break;
   }
-  const tocStep={step:'chapterList',status:tocFound.nodes?.length?'ok':'no-results',url:detail.url,count:tocFound.nodes?.length||0,configuredMatches:configuredTocMatches,examples:chapters};
-  if(inferredToc)tocStep.autoDiscovered={list:inferredToc.xpath,title:'./text()',url:'./@href',detectedCount:inferredToc.nodes.length};
-  if(source?.chapterList)tocStep.fieldChecks=actualSourceFieldChecks(source,detailDoc,'chapterList',(tocFound.nodes||[])[0]);
+  const tocStep={...tocRequestStep,status:tocFound.nodes?.length?'ok':'no-results',count:tocFound.total??tocFound.nodes?.length??0,sampledCount:tocFound.nodes?.length||0,configuredMatches:configuredTocMatches,examples:chapters};
+  if(inferredToc)tocStep.autoDiscovered={list:inferredToc.xpath,title:'//text()',url:'//@href',detectedCount:inferredToc.nodes.length};
+  if(source?.chapterList)tocStep.fieldChecks=actualSourceFieldChecks(source,tocDoc,'chapterList',tocFound.nodes||[]);
   if(tocFound.reason)tocStep.reason=tocFound.reason;
-  if(!tocFound.nodes?.length)tocStep.reason=tocStep.reason||'目录规则未能在详情页匹配章节；可能需要独立目录地址或 WebView';
+  if(!tocFound.nodes?.length)tocStep.reason=tocStep.reason||'目录规则未能在实际目录页匹配章节；可能需要不同规则或 WebView';
   steps.push(tocStep);
   if(!chapterUrl){steps.push(skipStep('chapterContent','没有可用于验证的章节链接'));return {sourceName:source?.sourceName||legado?.bookSourceName||'书源',site:origin,keyword,verifiedAt:new Date().toISOString(),steps,diagnostics,fullyVerified:false,depth:'live-static-dom'};}
   let chapterAddress;
-  try{chapterAddress=safeTarget(new URL(chapterUrl,detail.url).href,origin).href;}
+  let selectedChapterUrl,contentRequest;
+  try{selectedChapterUrl=new URL(chapterUrl,toc.url).href;
+    contentRequest=source?actionRequest(source.chapterContent,selectedChapterUrl,origin,keyword):{url:selectedChapterUrl};
+    if(!contentRequest.url)throw Error(contentRequest.reason);chapterAddress=safeTarget(contentRequest.url,origin).href;}
   catch(err){steps.push({step:'chapterContent',status:'unsupported',reason:tiny(err.message)});return {sourceName:source?.sourceName||'书源',site:origin,keyword,verifiedAt:new Date().toISOString(),steps,diagnostics,fullyVerified:false,depth:'live-static-dom'};}
   const chapter=await downloadSite(chapterAddress,origin,{fetcher,dnsChecker,timeoutMs});
-  const chapterStep=reportStep('chapterContent',chapter);
+  const chapterStep={...reportStep('chapterContent',chapter),requestInfoMissing:!!contentRequest.requestInfoMissing,
+    handoff:{from:contentRequest.usedResult===false?'chapterContent.requestInfo':'chapterList.url',value:redactUrl(contentRequest.usedResult===false?contentRequest.url:selectedChapterUrl)}};
   if(chapter.status==='ok'&&chapter.kind==='html'){
     const chapterDoc=new JSDOM(chapter.body,{url:chapter.url}).window.document;
     let section=!source && legado?.ruleContent?.content
       ?{nodes:legadoSelect(chapterDoc,legado.ruleContent.content,2)}
-      :evaluateXpath(chapterDoc,chapterDoc,source?.chapterContent?.content,2);
-    chapterStep.configuredMatches=section.nodes?.length||0;
+      :evaluateXpath(chapterDoc,chapterDoc,source?.chapterContent?.content,2000);
+    chapterStep.configuredMatches=section.total??section.nodes?.length??0;
     if(!chapterStep.configuredMatches){
       const inferred=inferChapterContent(chapterDoc);
       if(inferred){
@@ -493,22 +602,39 @@ export async function inspectSourceWeb(input,{fetcher,dnsChecker=checkPublicDns,
       }
     }
     if(source?.chapterContent)chapterStep.fieldChecks=actualSourceFieldChecks(source,chapterDoc,'chapterContent');
-    const text=tiny(section.nodes?.[0]?.textContent||'',800);
-    chapterStep.contentLength=String(section.nodes?.[0]?.textContent||'').trim().length;
+    const content=(section.nodes||[]).map(nodeText).join('\n');
+    const text=tiny(content,800);
+    chapterStep.contentLength=content.trim().length;
+    chapterStep.extractionTruncated=(section.total??0)>(section.nodes?.length||0);
     chapterStep.excerpt=tiny(text,32);
     chapterStep.status=text.length>=30?'ok':'no-results';
     if(section.reason)chapterStep.reason=section.reason;
     else if(text.length<30)chapterStep.reason='正文未匹配到足够内容，可能是 JavaScript 动态渲染或规则失效';
   }
+  if(chapter.status==='ok'&&chapter.kind!=='html'){chapterStep.status='unsupported';chapterStep.reason='正文响应不是 HTML，当前静态 DOM 检测不解析 '+chapter.kind;}
   steps.push(chapterStep);
   const httpChainVerified=steps.filter(x=>x.step!=='homepage').every(x=>x.status==='ok');
   const staticRulesMatch=steps.filter(x=>['search','chapterList','chapterContent'].includes(x.step))
     .every(x=>(x.configuredMatches??x.count??0)>0);
   const fieldRulesMatch=steps.every(x=>(x.fieldChecks||[]).every(f=>f.status==='ok'));
-  const unsupportedRequests=source && ['bookDetail','chapterList','chapterContent'].some(k=>source[k]?.requestInfo!=='%@result');
-  const fullyVerified=httpChainVerified&&staticRulesMatch&&fieldRulesMatch&&!unsupportedRequests&&!legado;
-  if(unsupportedRequests)diagnostics.push('独立目录/详情/正文 requestInfo 尚未执行，当前 HTTP 链不能证明配置可用');
+  const unsupportedRequests=source && (steps.some(x=>x.requestInfoMissing)||
+    ['searchBook','bookDetail','chapterList','chapterContent'].some(k=>{
+      const action=source[k]||{};
+      return action.parserID&&action.parserID!=='DOM'||action.responseFormatType&&action.responseFormatType!=='html'||
+        action.webView||action.webViewSniff||action.webViewContentRules||action.webViewJs||
+        ['JSParser','requestJavascript','responseJavascript','requestFunction','responseFunction'].some(key=>action[key])||
+        Object.keys(action.httpHeaders||{}).length>0||Object.keys(action.httpParams||{}).length>0||
+        action.requestParamsEncode&&!/^(utf-?8)$/i.test(action.requestParamsEncode);
+    }));
+  const fullyVerified=httpChainVerified&&staticRulesMatch&&fieldRulesMatch&&!unsupportedRequests&&!legado&&!searchStep.recoveredRequest&&!steps.some(x=>x.bodyTruncated||x.extractionTruncated);
+  if(unsupportedRequests)diagnostics.push('动作缺少 requestInfo，或声明的解析器、WebView、请求钩子、请求头/参数、特殊编码尚未执行，当前 HTTP 链不能证明配置可用');
+  if(searchStep.recoveredRequest)diagnostics.push('搜索请求使用网页表单替代了失败的配置；原配置未通过，须用修复候选独立复测');
   if(legado)diagnostics.push('附带原始 Legado 的检测用于发现问题；修复通过必须使用纯 XSGG 配置独立验证');
   if(httpChainVerified&&!staticRulesMatch)diagnostics.push('已从真实网页自动识别完整阅读链，但原 XSGG 规则不能直接匹配全部步骤；生成候选后必须再次验证');
   return {sourceName:source?.sourceName||legado?.bookSourceName||'书源',site:origin,keyword,verifiedAt:new Date().toISOString(),steps,diagnostics,fullyVerified,httpChainVerified,depth:'live-static-dom'};
+}
+
+export async function inspectSourceWeb(input,options={}) {
+  const report=await inspectSourceWebRaw(input,options);
+  return sanitizeEvidence(report,{source:input?.source,legado:input?.legado});
 }

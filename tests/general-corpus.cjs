@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),assert=require('node:assert/strict'),converter=require('../converter/lib/index.js');
-const root='reports/engine-20261009';fs.mkdirSync(root,{recursive:true});
+const root=process.env.REPORT_DIR||'reports/engine-'+new Date().toISOString().slice(0,10).replaceAll('-','');fs.mkdirSync(root,{recursive:true});
 const original=JSON.parse(fs.readFileSync('test-data/1298-original.json','utf8'));
 const t=performance.now(),result=converter.convertAll(original,{forceEnableAll:true,forceWeight:true,defaultWeight:100});
 assert.equal(result.okCount,15);assert.equal(result.failures.length,0);

@@ -59,9 +59,9 @@ test('relative href resolver handles origin-only base, traversal, query suffix a
 
 const request=rule=>new Function('config','params','result',rule.replace(/^@js:/,''))({host:raw.bookSourceUrl},{keyWord:'书',pageIndex:2},'');
 test('card descendant href is preserved rather than replaced by card attribute',()=>{
- const s=engine.convert(raw).output['通用测试'];assert.equal(s.searchBook.detailUrl,'(//a/@href)[1]');
+ const s=engine.convert(raw).output['通用测试'];const selector=require('../../converter/lib/linkRule.js').describeLinkRule(s.searchBook.detailUrl).selector;assert.equal(selector,'(descendant::a)[1]/@href');
  const d=new JSDOM('<a href="/wrong">menu</a><div class="card"><a href="/right">book</a></div>').window.document;
- assert.equal(d.evaluate(s.searchBook.detailUrl.replace(/\/\//g,'.//'),d.querySelector('.card'),null,2,null).stringValue,'/right');
+ assert.equal(d.evaluate(selector.replace(/\/\//g,'.//'),d.querySelector('.card'),null,2,null).stringValue,'/right');
 });
 test('JSON text import handles mixed wrappers, multiple sources, consecutive JSON and rejects garbage',()=>{
  const x={alias:{sourceName:'X',sourceUrl:'https://x.example',searchBook:{requestInfo:'/s',list:'//a'}}};

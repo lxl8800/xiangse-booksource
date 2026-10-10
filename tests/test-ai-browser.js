@@ -6,9 +6,9 @@ const bundle=fs.readFileSync('docs/converter.bundle.js','utf8');
 const ai=fs.readFileSync('docs/ai-assistant.js','utf8');
 const live=fs.readFileSync('docs/ai-web-probe.js','utf8');
 let html=fs.readFileSync('docs/index.html','utf8')
- .replace('<script src="./converter.bundle.js"></script>','<script>'+bundle+'</script>')
- .replace('<script src="./ai-assistant.js" defer></script>','<script>'+ai+'</script>')
- .replace('<script src="./ai-web-probe.js" defer></script>','<script>'+live+'</script>');
+ .replace('<script src="./converter.bundle.js"></script>',()=>'<script>'+bundle+'</script>')
+ .replace('<script src="./ai-assistant.js" defer></script>',()=>'<script>'+ai+'</script>')
+ .replace('<script src="./ai-web-probe.js" defer></script>',()=>'<script>'+live+'</script>');
 const updates=JSON.parse(fs.readFileSync('docs/updates.json','utf8'));
 (async()=>{
  const requests=[],errors=[];
@@ -118,7 +118,7 @@ const updates=JSON.parse(fs.readFileSync('docs/updates.json','utf8'));
  await new Promise(r=>setTimeout(r,28));
  assert.equal(d.getElementById('aiRepairSource').value,'⚡📂笔趣阁');
  const sampleOutput=JSON.parse(d.getElementById('output').value);
- assert.equal(sampleOutput['⚡📂笔趣阁'].searchBook.list,'(//*[contains(@id,"main")]//li)[not(position()=1)]');
+ assert.equal(sampleOutput['⚡📂笔趣阁'].searchBook.list,'(//*[@id="main"]//li)[not(position()=1)]');
  assert(d.getElementById('aiRepairStatus').textContent.includes('已加载本次笔趣阁书源'));
  d.getElementById('aiSiteProbe').click();
  await new Promise(r=>setTimeout(r,20));

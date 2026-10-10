@@ -155,7 +155,7 @@ test('Express serves static web and transient-user-key AI endpoints',async()=>{
  const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s))});
  const base='http://127.0.0.1:'+server.address().port;
  try{
-  const ping=await fetch(base+'/api/health');assert.equal(ping.status,200);assert.equal((await ping.json()).ok,true);
+  const ping=await fetch(base+'/api/health');assert.equal(ping.status,200);const health=await ping.json();assert.equal(health.ok,true);assert.match(health.version,/^\d+\.\d+\.\d+$/);
   const page=await fetch(base+'/');assert.equal(page.status,200);const pageText=await page.text();assert(pageText.includes('aiSettingsDialog'));
   assert.equal(page.headers.get('cache-control'),'no-store');
   const js=await fetch(base+'/ai-assistant.js');assert.equal(js.status,200);

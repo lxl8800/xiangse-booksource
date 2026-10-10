@@ -2,6 +2,7 @@
 /** Apply a *verified* permanent domain move to URL-bearing fields only.
  * Never rewrite arbitrary XPath/HTML, source names, user headers or CDN hosts.
  */
+var urlRule=require("./urlRule");
 function canonicalOrigin(raw) {
   try {
     var url=new URL(String(raw||'').trim());
@@ -10,23 +11,12 @@ function canonicalOrigin(raw) {
   }catch(e){return null;}
 }
 function replaceOrigin(text, oldOrigin, newOrigin) {
-  if(typeof text!=='string'||!oldOrigin)return text;
-  var cursor=0,out='';
-  while(cursor<text.length) {
-    var at=text.indexOf(oldOrigin,cursor);
-    if(at<0){out+=text.slice(cursor);break;}
-    var next=text.charAt(at+oldOrigin.length);
-    var prev=text.charAt(at-1);
-    // Only match exact URL authorities (not old.tld.evil or credentials).
-    var follows=!next || '/?# \t\r\n"\'\x60;)}>,'.includes(next);
-    if(follows && next!=='@' && prev!=='@'){
-      out+=text.slice(cursor,at)+newOrigin;
-    }else{
-      out+=text.slice(cursor,at+oldOrigin.length);
-    }
-    cursor=at+oldOrigin.length;
-  }
-  return out;
+  if(typeof text!=='string'||!oldOrigin||!newOrigin)return text;
+  // Only replace the leading authority. Query values, tokens and nested URLs
+  // are data and must remain byte-for-byte unchanged.
+  var authority=text.match(/^https?:\/\/[^/?#\s]+/i);
+  if(!authority||canonicalOrigin(authority[0])!==oldOrigin)return text;
+  return newOrigin+text.slice(authority[0].length);
 }
 function rewriteTrustedHeaders(h, oldOrigin, newOrigin, changes, path){
   if(!h||typeof h!=='object'||Array.isArray(h))return;
@@ -41,8 +31,8 @@ function rewriteModuleFields(module, oldOrigin,newOrigin,changes,path){
   var fields=['host','requestInfo','url','detailUrl','chapterListUrl','nextPageUrl','cover'];
   for(var i=0;i<fields.length;i++){
     var field=fields[i],before=module[field];
-    if(typeof before!=='string' || !/^https?:\/\//i.test(before))continue;
-    var after=replaceOrigin(before,oldOrigin,newOrigin);
+    if(typeof before!=='string')continue;
+    var after=field==="requestInfo" ? urlRule.rewriteStaticGetOrigin(before,oldOrigin,newOrigin) : /^https?:\/\//i.test(before) ? replaceOrigin(before,oldOrigin,newOrigin) : before;
     if(after!==before){
       module[field]=after;
       changes.push({path:path+'.'+field,oldValue:before,newValue:after});
@@ -60,7 +50,7 @@ function applyVerifiedDomainMove(source, verifiedMove) {
     return {source:source,changes:[],applied:false};
   }
   var allModules=['searchBook','bookDetail','chapterList','chapterContent'].map(function(k){return source[k];}).concat(Object.values(source.bookWorld||{}));
-  if(allModules.some(function(m){return m && Object.keys(m).some(function(k){return typeof m[k]==='string' && m[k].indexOf('@js:')>=0 && m[k].indexOf(oldOrigin)>=0;});})){
+  if(allModules.some(function(m){return m && Object.keys(m).some(function(k){return typeof m[k]==='string' && m[k].indexOf('@js:')>=0 && m[k].toLowerCase().indexOf(oldOrigin.toLowerCase())>=0 && !(k==='requestInfo' && urlRule.describeStaticGetRequest(m[k]));});})){
     return {source:source,changes:[],applied:false,needsReview:true,reason:'动态脚本包含旧域名，不能用字符串替换修改 Cookie/Token 或代码文本；需字段级候选与复测'};
   }
   var result=JSON.parse(JSON.stringify(source)),changes=[];

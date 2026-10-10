@@ -9,6 +9,21 @@
 var utils = require("./utils");
 var escAttr = utils.escAttr;
 var escStr = utils.escStr;
+function decodeCssString(value) {
+  return String(value).replace(/\\(["'\\])/g, "$1");
+}
+
+// Delimiters inside quoted attribute values or nested pseudo functions are data.
+function closingDelimiter(text, start, open, close) {
+  var depth=1, quote=null;
+  for(var i=start+1;i<text.length;i++) {
+    var c=text[i];
+    if(quote){if(c==="\\"){i++;continue;}if(c===quote)quote=null;continue;}
+    if(c==="\'"||c==='"'){quote=c;continue;}
+    if(c===open)depth++;else if(c===close&&--depth===0)return i;
+  }
+  return -1;
+}
 
 // Split comma-separated CSS groups while preserving commas in attributes and pseudo functions.
 function splitCssGroups(s) {
@@ -44,6 +59,7 @@ function attrPredicateToXpath(bracket) {
   if ((val[0] === '"' && val.slice(-1) === '"') || (val[0] === "'" && val.slice(-1) === "'")) {
     val = val.slice(1, -1);
   }
+  val = decodeCssString(val);
   var v = utils.xpathLiteral(val);
   switch (op) {
     case "=": return { predicate: "[@" + attr + "=" + v + "]", error: null };
@@ -54,7 +70,7 @@ function attrPredicateToXpath(bracket) {
     };
     case "*=": return { predicate: "[contains(@" + attr + "," + v + ")]", error: null };
     case "~=": return {
-      predicate: "[contains(concat(' ',normalize-space(@" + attr + "),' '),' " + escAttr(val) + " ')]",
+      predicate: "[contains(concat(' ',normalize-space(@" + attr + "),' ')," + utils.xpathLiteral(" "+val+" ") + ")]",
       error: null
     };
     case "!=":
@@ -98,7 +114,7 @@ function parseCompound(tok, ctx, notes) {
       continue;
     }
     if (c === "[") {
-      var end = tok.indexOf("]", i);
+      var end = closingDelimiter(tok, i, "[", "]");
       if (end === -1) return { error: "属性选择器未闭合: " + tok };
       var r = attrPredicateToXpath(tok.slice(i, end + 1));
       if (r.error) return { error: r.error };
@@ -108,26 +124,31 @@ function parseCompound(tok, ctx, notes) {
       continue;
     }
     if (c === ":") {
-      var pm = tok.slice(i).match(/^:([a-zA-Z-]+)(\(([^)]*)\))?/);
+      var pm = tok.slice(i).match(/^:([a-zA-Z-]+)/);
       if (!pm) return { error: "伪类无法解析: " + tok };
-      var name = pm[1];
-      var arg = pm[3] !== undefined ? pm[3] : null;
+      var name = pm[1], arg = null, consumed = pm[0].length;
+      if(tok[i+consumed]==="("){
+        var close=closingDelimiter(tok,i+consumed,"(",")");
+        if(close<0)return {error:"伪类参数未闭合: "+tok};
+        arg=tok.slice(i+consumed+1,close).trim();
+        consumed=close-i+1;
+      }
       var pr;
       switch (name) {
         case "eq":
-          var idx = parseInt(arg, 10);
-          if (isNaN(idx)) return { error: ":eq 参数非法: " + arg };
-          pr = String(idx + 1); // //div[1] 等价于 //div[position()=1]
+          var idx = Number(arg);
+          if (!/^-?\d+$/.test(arg || "")) return { error: ":eq 参数非法: " + arg };
+          pr = utils.indexToPosExpr(idx);
           break;
         case "gt":
-          var idx2 = parseInt(arg, 10);
-          if (isNaN(idx2)) return { error: ":gt 参数非法: " + arg };
-          pr = "position()>" + (idx2 + 1);
+          var idx2 = Number(arg);
+          if (!/^-?\d+$/.test(arg || "")) return { error: ":gt 参数非法: " + arg };
+          pr = "position()>(" + utils.indexToPosExpr(idx2) + ")";
           break;
         case "lt":
-          var idx3 = parseInt(arg, 10);
-          if (isNaN(idx3)) return { error: ":lt 参数非法: " + arg };
-          pr = "position()<" + (idx3 + 1);
+          var idx3 = Number(arg);
+          if (!/^-?\d+$/.test(arg || "")) return { error: ":lt 参数非法: " + arg };
+          pr = "position()<(" + utils.indexToPosExpr(idx3) + ")";
           break;
         case "first":
           pr = "1";
@@ -163,19 +184,16 @@ function parseCompound(tok, ctx, notes) {
           pr = "position()=last()";
           break;
         case "contains":
-          pr = 'contains(.,"' + escAttr(arg) + '")';
+          pr = "contains(.," + utils.xpathLiteral(decodeCssString(utils.unquote(arg || ""))) + ")";
           break;
         case "containsOwn":
-          pr = 'contains(text(),"' + escAttr(arg) + '")';
+          pr = "contains(text()," + utils.xpathLiteral(decodeCssString(utils.unquote(arg || ""))) + ")";
           break;
         default:
-          notes.push("伪类 :" + name + " 不支持，已忽略");
-          i += pm[0].length;
-          first = false;
-          continue;
+          return { error: "伪类 :" + name + " 不支持，不能安全忽略" };
       }
-      (pr === "1" || /^position()/.test(pr) || /^\d+$/.test(pr)) ? posPreds.push(pr) : preds.push(pr);
-      i += pm[0].length;
+      (pr === "1" || /^position\(\)/.test(pr) || /^last\(\)/.test(pr) || /^\d+$/.test(pr)) ? posPreds.push(pr) : preds.push(pr);
+      i += consumed;
       first = false;
       continue;
     }
@@ -198,24 +216,26 @@ function selectorToXpathChain(selector, ctx) {
   var comb = null; // null | ' ' | '>' | '+'
   var i = 0;
   var n = selector.length;
-  var step = 0;
+  var square=0, round=0, quote=null;
   while (i < n) {
-    var c = selector[i];
-    if (c === ">" || c === "+" || c === "~") {
-      if (buf) { tokens.push({ sel: buf, comb: comb }); buf = ""; }
-      else if (tokens.length) tokens[tokens.length - 1].comb = tokens[tokens.length - 1].comb || " ";
-      comb = c;
-      i++;
-      continue;
+    var c=selector[i];
+    if(quote){
+      buf+=c;
+      if(c==="\\" && i+1<n)buf+=selector[++i];
+      else if(c===quote)quote=null;
+      i++;continue;
     }
-    if (c === " " || c === "\t") {
-      if (buf) { tokens.push({ sel: buf, comb: comb }); buf = ""; comb = " "; }
-      i++;
-      continue;
+    if(c==="'"||c==='"'){quote=c;buf+=c;i++;continue;}
+    if(c==="[")square++;else if(c==="]")square--;
+    else if(c==="(")round++;else if(c===")")round--;
+    if(square===0&&round===0&&(c===">"||c==="+"||c==="~"||/\s/.test(c))){
+      if(buf){tokens.push({sel:buf,comb:comb});buf="";comb=" ";}
+      if(!/\s/.test(c))comb=c;
+      i++;continue;
     }
-    buf += c;
-    i++;
+    buf+=c;i++;
   }
+  if(quote||square!==0||round!==0)return {error:"CSS 引号或括号未闭合",notes:notes};
   if (buf) tokens.push({ sel: buf, comb: comb });
   if (!tokens.length) return { error: "空选择器", notes: notes };
 
@@ -231,9 +251,10 @@ function selectorToXpathChain(selector, ctx) {
     else if (comb2 === "+" || comb2 === "~") sep = "/following-sibling::";
     else sep = "//";
     if (comb2 === "+") {
-      // 相邻兄弟：取第一个匹配（保持旧行为）
-      var sibBody = (acc === null ? "" : acc) + sep + stepXp;
-      acc = "(" + sibBody + ")[1]";
+      // CSS + requires the immediate next element, not the next matching sibling.
+      var sibBody = acc + "/following-sibling::*[1][self::" + pc.tag + "]" +
+        (pc.preds.length ? "["+pc.preds.join(" and ")+"]" : "");
+      acc = pc.posPred ? "("+sibBody+")["+pc.posPred+"]" : sibBody;
       continue;
     }
     var body2 = (acc === null ? "" : acc) + sep + stepXp;
@@ -284,7 +305,7 @@ function convertCss(rule, ctx) {
     xpath += m.xpath;
     notes = notes.concat(m.notes);
   }
-  return { xpath: xpath, notes: notes };
+  return { xpath: utils.scopeGroupedListXPath(xpath, ctx), notes: notes };
 }
 
 module.exports = {

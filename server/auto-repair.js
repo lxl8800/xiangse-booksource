@@ -1,5 +1,8 @@
 import { unwrapSource, staticSourceIssues } from './repair.js';
 import { inspectSourceWeb } from './site-evidence.js';
+import {applySiteMetadataAdapters} from './site-adapters.js';
+import {createRequire} from 'node:module';
+const {rewriteStaticGetOrigin,rewriteStaticGetUrl}=createRequire(import.meta.url)('../converter/lib/urlRule.js');
 
 /**
  * Deterministic, evidence-backed proposals. No user API key or model prompt.
@@ -64,19 +67,20 @@ export function buildAutoCandidate(doc, sourceName, evidence, legadoInput = null
       if(candidate[m]?.host && new URL(candidate[m].host).origin===originalSite.origin)
         update(m,'host',liveHomepage.origin,'跟随已验证的 canonical 域名变更');
     }
-    if(stage.search?.url && stage.search.status==='ok' && source.searchBook?.requestInfo?.startsWith('@js:') && evidence.keyword){
-      const literal=new URL(stage.search.url).href;
-      const encoded=encodeURIComponent(evidence.keyword);
-      const idx=literal.indexOf(encoded);
-      if(idx>=0)update('searchBook','requestInfo',literal.replace(encoded,'%@keyWord'),
-        '从真实成功的搜索 GET URL 生成静态请求，避免原动态脚本和 301 跳转');
+    if(stage.search?.url && stage.search.status==='ok' &&
+       new URL(stage.search.url).origin===liveHomepage.origin &&
+       (stage.search.redirects||[]).every(r=>[301,308].includes(r.status))) {
+      const original=source.searchBook?.requestInfo;
+      const rewritten=rewriteStaticGetOrigin(original,originalSite.origin,liveHomepage.origin);
+      update('searchBook','requestInfo',rewritten,
+        '仅修改已验证 GET 请求的规范域名，保留分页、请求对象和 forbidCookie 设置');
     }
   }
   if(stage.search?.discoveredSearch && stage.search.searchAttempts?.some(x=>x.status!=='ok')){
     const base=new URL(stage.search.url);
     const form=stage.search.discoveredSearch;
-    const url=base.origin+form.action+'?'+encodeURIComponent(form.parameter)+'=%@keyWord';
-    update('searchBook','requestInfo',url,'原搜索接口请求失败，已从网站首页真实 form 验证新的 GET 搜索入口');
+    const url=form.requestTemplate||base.origin+form.action+'?'+encodeURIComponent(form.parameter)+'=%@keyWord';
+    update('searchBook','requestInfo',rewriteStaticGetUrl(candidate.searchBook.requestInfo,url)||url,'原搜索接口失败，从真实 form 验证新的 GET 入口；保留可识别请求对象的 Cookie 设置');
     if (candidate.searchBook.requestParamsEncode) {
       const old=String(candidate.searchBook.requestParamsEncode);
       delete candidate.searchBook.requestParamsEncode;
@@ -89,87 +93,34 @@ export function buildAutoCandidate(doc, sourceName, evidence, legadoInput = null
     for(const field of ['list','bookName','detailUrl']){
       update('searchBook',field,searchInference[field],'真实搜索 HTML 中旧选择器匹配 0 条，新选择器匹配 '+searchInference.detectedCount+' 条');
     }
-    // Infer only universally grounded HTML fields; do not guess selectors for unrelated metadata.
-    if(/\.myshu\.cc$/.test(new URL(stage.search.url).hostname)) {
-      update('searchBook','author',".//dd[contains(@class,'book_other')][1]/span/text()",'实际书籍节点中可见作者字段');
-      update('searchBook','cover','.//dt/a/img/@src','实际书籍节点中可见封面图片');
-      update('searchBook','lastChapterTitle',".//dd[contains(text(),'最新章节')]/a/text()",'实际书籍节点包含最新章节链接');
-    }
   }
-  // The converter cannot resolve an external Legado jsLib helper named
-  // getCover in XSGG. On sites where real HTML supplies a full <img src>
-  // URL, use its XPath directly without executing arbitrary JS.
-  if(candidate.sourceUrl.includes('suduguu.com') && stage.search?.status==='ok' &&
-     stage.search.examples?.some(x=>/^\/\d+\/$/.test(x.detailUrl||''))){
-    update('searchBook','bookName','.//h3/a/text()','真实搜索节点内的标题，应使用相对于当前书籍卡片的 XPath');
-    update('searchBook','detailUrl','.//h3/a/@href','原 //@href 使用绝对 XPath，会错误选择页面上第一个链接而不是书籍链接');
-  }
-  if(candidate.sourceUrl.includes('suduguu.com') && stage.search?.status==='ok' &&
-     source.searchBook?.cover?.includes('getCover(')){
-    update('searchBook','cover','.//img/@src','真实搜索卡片中 img src 已为完整 HTTPS URL，不依赖缺失的 getCover(jsLib)');
-  }
-  if(candidate.sourceUrl.includes('suduguu.com') && stage.detail?.status==='ok' &&
-     source.bookDetail?.cover?.includes('getCover(')){
-    update('bookDetail','cover',"//div[contains(concat(' ',normalize-space(@class),' '),' item ')]//img/@src",
-      '真实详情 HTML 的图片 URL 已为绝对地址，不依赖 Legado jsLib');
-  }
+
   if(typeof candidate.searchBook.requestInfo!=='string' || !candidate.searchBook.requestInfo.trim()){
     if(stage.search?.discoveredSearch){
       const form=stage.search.discoveredSearch;
       const base=new URL(stage.search.url);
-      update('searchBook','requestInfo',base.origin+form.action+'?'+encodeURIComponent(form.parameter)+'=%@keyWord',verified);
+      update('searchBook','requestInfo',form.requestTemplate||base.origin+form.action+'?'+encodeURIComponent(form.parameter)+'=%@keyWord',verified);
     } else diagnostics.push('搜索 requestInfo 缺失，未找到可安全填充的静态 URL');
   }
   if(!candidate.bookDetail.requestInfo) update('bookDetail','requestInfo','%@result','详情页面来自实际搜索结果的书籍链接');
-  const detailTitle = stage.detail?.title || '';
-  if(!candidate.bookDetail.bookName && detailTitle && /\.myshu\.cc$/.test(new URL(stage.detail.url).hostname)){
-    update('bookDetail','bookName',"//div[contains(@class,'book_info')]//h1/text()",'实际详情页中的书名位置');
-  }
+  if(!candidate.bookDetail.bookName&&stage.detail.fieldChecks?.some(x=>x.field==='title'&&x.status==='ok'))
+    update('bookDetail','bookName',candidate.bookDetail.title,'沿用本次真实详情页验证通过的标题规则，补齐书名字段');
+  applySiteMetadataAdapters(stage,candidate,update);
   const chapterInference=stage.chapterList?.autoDiscovered;
   if(chapterInference && stage.chapterList.configuredMatches===0){
     for(const field of ['list','title','url']){
-      update('chapterList',field,chapterInference[field],'详情 HTML 旧目录规则匹配 0 条，已识别 '+chapterInference.detectedCount+' 个真实章节链接');
+      update('chapterList',field,chapterInference[field],'实际目录 HTML 中旧规则匹配 0 条，已识别 '+chapterInference.detectedCount+' 个真实章节链接');
     }
   }
-  if(!candidate.chapterList.requestInfo)update('chapterList','requestInfo','%@result','目录链接位于已确认的详情页');
+  if(!candidate.chapterList.requestInfo)update('chapterList','requestInfo','%@result','目录请求沿用检测报告已确认的详情或独立目录地址');
   const contentInference=stage.chapterContent?.autoDiscovered;
   if(contentInference && stage.chapterContent.configuredMatches===0){
     update('chapterContent','content',contentInference.content,'章节 HTML 中原正文 XPath 匹配 0 条，已找到包含完整内容的节点');
   }
   if(!candidate.chapterContent.requestInfo)update('chapterContent','requestInfo','%@result','正文来自实际章节链接');
-  // Restore the documented non-executable Explore category table from
-  // Legado source text. Never eval arbitrary exploreUrl JavaScript.
-  const legado=Array.isArray(legadoInput)?legadoInput[0]:legadoInput;
-  const explore=String(legado?.exploreUrl||'');
-  if(candidate.sourceUrl.includes('www.suduguu.com') && explore.includes('::/') &&
-     stage.homepage.status==='ok' && stage.search.status==='ok'){
-    const categories=[...explore.matchAll(/(?:^|\n)([^:\n]{2,28})::\/([a-z]{2,30})\/\{\{page\}\}\.html/g)];
-    if(categories.length>=3 && categories.length<=30){
-      const replacement={};
-      for(const entry of categories){
-        const title=entry[1].trim(),dir=entry[2];
-        if(Object.hasOwn(replacement,title))continue;
-        const url=candidate.sourceUrl+'/'+dir+'/';
-        replacement[title]={validConfig:'',actionID:'bookWorld',host:candidate.sourceUrl,
-          parserID:'DOM',responseFormatType:'html',
-          requestInfo:'@js:\nvar p=Math.max(1,parseInt(params&&params.pageIndex||1,10)||1);\nreturn {url:'+JSON.stringify(url)+'+(p===1?"":p+".html")};',
-          list:candidate.searchBook.list,bookName:'.//h3/a/text()',detailUrl:'.//h3/a/@href',
-          cover:'.//img/@src',moreKeys:{maxPage:20}};
-      }
-      if(Object.keys(replacement).length>=3){
-        candidate.bookWorld=replacement;
-        changes.push({path:'bookWorld',oldValue:'原分类动态脚本生成的规则未被可靠转换',newValue:'已重建 '+Object.keys(replacement).length+' 个静态分类入口',
-          reason:'按原始 Legado 类别 URL 表提取，不执行其 JS；已实测最近更新页面可获得 .item 列表，其余类别分页需进一步在客户端测试'});
-      }
-    }
-  }
   if(typeof candidate.enable!=='number'){
     const old=candidate.enable;candidate.enable=[false,'false','0',0].includes(old)?0:1;
     changes.push({path:'enable',oldValue:String(old),newValue:String(candidate.enable),reason:'归一化整数开关，保留原有启用/禁用意图'});
-  }
-  const chapterRule=candidate.chapterList?.url;
-  if(typeof chapterRule==='string' && chapterRule.includes("||@js:\nvar u=String(result==null?'':result).trim();") && stage.chapterList.examples?.some(x=>x.url)){
-    update('chapterList','url',chapterRule.split('||@js:')[0],'已通过真实章节 href 取值验证，静态 XPath 保留链接，验证器按响应 URL 解析相对地址；App 链接解析仍需实测');
   }
   if(!/^[1-9]\d*$/.test(String(candidate.weight))){candidate.weight='100';}
   else candidate.weight=String(candidate.weight);
