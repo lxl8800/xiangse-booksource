@@ -7,6 +7,8 @@ const htmlOriginal=fs.readFileSync('docs/index.html','utf8');
 const bundle=fs.readFileSync('docs/converter.bundle.js','utf8');
 const html=htmlOriginal.replace('<script src="./converter.bundle.js"></script>',()=>'<script>'+bundle+'</script>');
 const updates=JSON.parse(fs.readFileSync('docs/updates.json','utf8'));
+const downloadSources=JSON.parse(fs.readFileSync('docs/downloads/xiangse_latest.json','utf8'));
+const downloadNames=Object.keys(downloadSources);
 async function run(){
  const errors=[];
  const dom=new JSDOM(html,{
@@ -24,7 +26,8 @@ async function run(){
  assert.equal(d.querySelectorAll('.sidebar-nav .nav-item').length,6);
  assert.equal(d.querySelectorAll('[data-panel-section]').length,6);
  assert.equal(d.querySelectorAll('#panel-downloads a[href*="xiangse_latest.zip"]').length,2);
- assert.equal(d.querySelectorAll('#panel-downloads .source-chip-grid span').length,14);
+ assert.deepEqual([...d.querySelectorAll('#panel-downloads .source-chip-grid span')].map(x=>x.textContent),downloadNames,'displayed source list matches actual bundle');
+ assert.equal(d.querySelector('#panel-downloads .bundle-facts strong').textContent,String(downloadNames.length));
  assert(d.querySelector('style').textContent.includes('@media (max-width: 920px)'));
  assert.equal(d.querySelector('header.topbar').tagName,'HEADER');
  assert.equal(typeof w.ConverterLib.convertAll,'function');
@@ -55,6 +58,14 @@ async function run(){
  assert(!d.getElementById('dlXbsBtn').disabled);
  const xbs=w.json2xbs(output);
  assert.equal(w.xbs2json(xbs),output);
+ assert.deepEqual(JSON.parse(w.xbs2json(fs.readFileSync('docs/downloads/xiangse_latest.xbs'))),downloadSources,'published XBS matches readable JSON');
+ for(const name of ['速读谷','天天小书屋']){
+  const source=downloadSources[name];
+  assert.equal(source.enable,1,name+' enabled');
+  assert(Number(source.weight)>0,name+' positive weight');
+  assert(Object.keys(source.bookWorld).length>0,name+' discoverable category entry');
+  for(const action of ['searchBook','bookDetail','chapterList','chapterContent'])assert(source[action].requestInfo,name+' '+action+' requestInfo');
+ }
  const fakeSource={bookSourceName:'测试检测书源',bookSourceUrl:'https://example.com/'};
  const parsed=w.chkParse(JSON.stringify([fakeSource]));
  assert.equal(parsed.entries.length,1);
@@ -82,6 +93,6 @@ async function run(){
  console.log('PASS 6 sidebar tabs + responsive drawer state + Escape close');
  console.log('PASS preserved original converter, sample input and XML checker data parser');
  console.log('PASS XBS encrypt/decrypt, XBS panel output, copy/download enabled, clear works');
- console.log('PASS 14 source links, '+updates.length+' release history items, unique IDs, no script errors');
+ console.log('PASS '+downloadNames.length+' bundle sources and JSON/XBS consistency, '+updates.length+' release history items, unique IDs, no script errors');
 }
 run().catch(e=>{console.error(e.stack||String(e));process.exitCode=1});

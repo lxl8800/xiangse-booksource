@@ -119,6 +119,8 @@ python3 app/tools/gen-converter-bundle.py
 
 可结合 [cloudmantou/xiangseSkill](https://github.com/cloudmantou/xiangseSkill) 的严格结构检查、编辑器兼容检查、fixture / live 模拟和 JSON / XBS 回读工具。四步网站检测通过也不能替代官方 App 的最终实测。
 
+最新整合包包含 15 条源：新增天天小书屋，更新速读谷，其余 13 条保持原样。下载 [ZIP 整合包](docs/downloads/xiangse_latest.zip)、[直接 XBS](docs/downloads/xiangse_latest.xbs) 或 [JSON](docs/downloads/xiangse_latest.json)。两条更新源通过 HTTP 四步验证，官方 iOS App 实测仍待完成。
+
 本轮核心问题、测试结果与限制见 [通用引擎复核记录](docs/ENGINE-REVIEW-20261010.md)。可运行 `node tools/check-two-live.mjs` 重测速读谷与天天小书屋；它会访问真实站点，输出证据到被 Git 忽略的 `reports/`。
 
 ### 目录结构

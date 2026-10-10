@@ -2,7 +2,7 @@
   "name": "xiangse-booksource",
   "private": true,
   "type": "module",
-  "version": "1.8.3",
+  "version": "1.8.4",
   "scripts": {
     "start": "node server/index.js",
     "test": "node --test server/tests/*.test.js"
