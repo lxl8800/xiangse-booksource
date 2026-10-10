@@ -76,7 +76,7 @@ npm ci
 npm start
 ```
 
-默认访问 `http://localhost:4397`。可通过 `HOST`、`PORT` 设置监听地址与端口。仓库地址须在远程仓库创建完成后才能使用。
+默认访问 `http://localhost:4397`。可通过 `HOST`、`PORT` 设置监听地址与端口。
 
 只使用浏览器转换与 XBS 工具时，也可静态托管 `docs/`。域名检查、网站证据及服务端 AI 功能需要 Node.js API，单独部署 GitHub Pages 不会自动获得这些能力。
 
