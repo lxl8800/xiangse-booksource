@@ -136,6 +136,19 @@
       if(step.url)evidenceLines.push((step.reusedResponse?'复用详情响应：':'请求：'+(step.requestMethod||'GET')+' ')+step.url);
       if(step.handoff)evidenceLines.push('地址传递：'+step.handoff.from+(step.handoff.value?' → '+step.handoff.value:''));
       if(step.kind)evidenceLines.push('响应类型：'+step.kind+'，响应字节：'+(step.bytes||0));
+      if(step.parserFormat)evidenceLines.push('实际解析格式：'+step.parserFormat);
+      if(step.pagination){
+        var paging=step.pagination;
+        evidenceLines.push('分页：请求 '+paging.pagesRequested+' 页；'+(paging.complete?'已到末页':'未完成')+(paging.reason?'；'+paging.reason:''));
+        if(typeof paging.mergedCount==='number')evidenceLines.push('合并目录：'+paging.mergedCount+' 条；重复地址 '+(paging.duplicates||0)+' 条');
+        if(typeof paging.mergedContentLength==='number')evidenceLines.push('合并正文长度：'+paging.mergedContentLength);
+        (paging.pages||[]).forEach(function(page){
+          evidenceLines.push('第 '+page.page+' 页：'+(page.httpStatus?'HTTP '+page.httpStatus:page.status)+' '+page.url+'；耗时 '+(page.elapsedMs||0)+'ms'+(page.reason?'；'+page.reason:''));
+          if(page.nextUrl)evidenceLines.push('  下一页：'+page.nextUrl);
+          (page.redirects||[]).forEach(function(hop){evidenceLines.push('  跳转 HTTP '+hop.status+'：'+hop.url+' → '+hop.location);});
+          (page.fieldChecks||[]).forEach(function(field){evidenceLines.push('  字段 '+field.field+'：'+field.status+'，匹配 '+field.matches+'；'+field.rule);});
+        });
+      }
       if(step.charset)evidenceLines.push('字符编码：'+step.charset+'（'+(step.charsetSource||'响应声明')+'）');
       if(step.requestCapabilities){
         var request=step.requestCapabilities;
@@ -150,7 +163,7 @@
       if(step.discoveredSearch)evidenceLines.push('自动发现搜索表单：'+step.discoveredSearch.action+' ? '+step.discoveredSearch.parameter+'=关键词');
       if(step.autoDiscovered)evidenceLines.push('自动发现可匹配选择器：'+JSON.stringify(step.autoDiscovered));
       (step.fieldChecks||[]).forEach(function(x){
-        evidenceLines.push('字段 '+x.field+'：'+x.status+'，匹配 '+(x.matches??'?')+' 条；'+(x.note||'')+'；规则 '+x.rule);
+        evidenceLines.push('字段 '+x.field+(x.parser?'（'+x.parser+'）':'')+'：'+x.status+'，匹配 '+(x.matches??'?')+' 条；'+(x.note||'')+'；规则 '+x.rule);
         if(x.normalization==='response-url')evidenceLines.push('  相对地址按该页最终响应 URL 解析（已识别转换器规则）。');
         (x.contexts||[]).forEach(function(row){
           evidenceLines.push('  '+(x.context==='list-node'?'列表条目 '+(row.index+1):'页面')+'：匹配 '+row.matches+'；样例 '+JSON.stringify(row.samples||[])+(row.resolvedUrls?.length?'；解析地址 '+JSON.stringify(row.resolvedUrls):''));

@@ -162,12 +162,13 @@ test('empty-string WebView flags, source hooks and decryption are never treated 
   const {report}=await inspect(s);assert.equal(report.fullyVerified,false,key);assert(report.diagnostics.some(x=>x.includes(key)));
  }
 });
-test('nextPageUrl and page-index templates explicitly remain incomplete after a first-page HTTP chain',async()=>{
+test('search pagination and page-index-only requests remain incomplete while terminal list/content pagination is checked',async()=>{
  for(const module of ['searchBook','chapterList','chapterContent']){
   const s=source();s[module].nextPageUrl='//a[@rel="next"]/@href';const {report}=await inspect(s);
-  assert(report.httpChainVerified);assert.equal(report.fullyVerified,false);
+  assert(report.httpChainVerified);assert.equal(report.fullyVerified,module!=='searchBook');
   const step=report.steps.find(x=>x.step===({searchBook:'search',chapterList:'chapterList',chapterContent:'chapterContent'}[module]));
-  assert(step.requestCapabilities.unchecked.some(x=>x.field==='nextPageUrl'));
+  assert.equal(step.requestCapabilities.unchecked.some(x=>x.field==='nextPageUrl'),module==='searchBook');
+  if(module!=='searchBook')assert.equal(step.pagination.complete,true);
  }
  const s=source();s.chapterList.requestInfo=origin+'/book/?p=%@pageIndex';
  const {report}=await inspect(s);assert.equal(report.fullyVerified,false);assert(report.steps[3].requestCapabilities.unchecked.some(x=>x.field==='requestInfo.pageIndex'));

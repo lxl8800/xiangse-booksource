@@ -67,7 +67,7 @@ export function buildGetPlan({source={},action={},seed='',origin,keyword='',page
     if(inherited(source,action,key))capabilities.push(issue(key,'未执行 App 动态钩子或网页脚本'));
   }
   if(action.parserID&&action.parserID!=='DOM')capabilities.push(issue('parserID','当前读取链仅执行 DOM 解析'));
-  if(action.responseFormatType&&action.responseFormatType!=='html')capabilities.push(issue('responseFormatType','当前读取链仅解析 HTML'));
+  if(action.responseFormatType&&!['html','json'].includes(action.responseFormatType))capabilities.push(issue('responseFormatType','当前读取链仅解析 HTML 和 JSON'));
   if(action.nextPageUrl)capabilities.push(issue('nextPageUrl','尚未验证后续分页，当前只检查第一页'));
   if(action.moreKeys?.skipCount)capabilities.push(issue('moreKeys.skipCount','尚未执行列表跳过条目配置'));
   if(descriptor.url.includes('%@pageIndex'))capabilities.push(issue('requestInfo.pageIndex','页号模板只展开为第一页，尚未检查后续页'));

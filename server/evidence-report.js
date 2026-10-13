@@ -68,7 +68,7 @@ export function sanitizeEvidence(report,source) {
   }
   inspect(source);
   function clean(value,depth=0){
-    if(depth>10)return '[omitted]';
+    if(depth>14)return '[omitted]';
     if(typeof value==='string'){
       let text=redactText(value);
       for(const secret of secrets)text=text.replaceAll(secret,'[redacted]');
@@ -78,5 +78,5 @@ export function sanitizeEvidence(report,source) {
     if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).slice(0,80).map(([key,item])=>[key,clean(item,depth+1)]));
     return value;
   }
-  return clean({...report,reportVersion:1,verificationScope:'single-book-first-chapter-static-html',appVerified:false});
+  return clean({...report,reportVersion:1,verificationScope:'sampled-book-static-http-reading-chain',appVerified:false});
 }

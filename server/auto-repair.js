@@ -41,7 +41,8 @@ export function buildAutoCandidate(doc, sourceName, evidence, legadoInput = null
     }
     update(module,'actionID',module,reason);
     update(module,'parserID','DOM',reason);
-    update(module,'responseFormatType','html',reason);
+    const step={searchBook:'search',bookDetail:'detail',chapterList:'chapterList',chapterContent:'chapterContent'}[module];
+    update(module,'responseFormatType',stage[step]?.parserFormat||(candidate[module].responseFormatType==='json'?'json':'html'),reason);
   }
 
   // The proposal must not pretend to fix a site that refuses HTTP requests.
@@ -50,9 +51,9 @@ export function buildAutoCandidate(doc, sourceName, evidence, legadoInput = null
     issues:staticSourceIssues(source),
     diagnostics:['未取得成功的搜索→详情→目录→正文 HTTP 证据，不自动修改 XPath 或凭空假设网页结构']
   };
-  const verified='来自本次 HTTP200 的真实页面与 DOM 匹配结果';
+  const verified='来自本次 HTTP200 的真实响应与配置解析规则匹配结果';
   if(!candidate.sourceType && stage.chapterContent.status==='ok')
-    updateTop('sourceType','text','真实章节 HTML 已验证为文字小说正文，补齐 XSGG 必需书源类型');
+    updateTop('sourceType','text','真实章节响应已验证为文字小说正文，补齐 XSGG 必需书源类型');
   for (const module of ['searchBook','bookDetail','chapterList','chapterContent']) ensureModule(module,verified);
   // Canonical-domain proof: the server actually followed an apex -> www
   // redirect. Propose changing the source host and module hosts in the
