@@ -24,6 +24,7 @@ async function run(){
   w.localStorage.setItem('my-api-key','LOCAL_PRIVATE_API_KEY');
   const evidence={sourceName:'测试源',site:'https://www.myshu.cc',keyword:'测试',fullyVerified:false,appVerified:false,reportVersion:1,
     steps:[{step:'search',status:'ok',httpStatus:200,requestMethod:'GET',url:'https://www.myshu.cc/search?q=test',charset:'utf-8',
+      requestCapabilities:{headersApplied:['User-Agent'],headersSkipped:['Authorization'],requestEncoding:'gbk',responseEncoding:'gbk',unchecked:[{field:'nextPageUrl',reason:'尚未检查后续分页'}]},
       handoff:{from:'bookDetail.chapterListUrl',value:'https://www.myshu.cc/toc/1/'},redirects:[{status:301,url:'http://www.myshu.cc/search',location:'https://www.myshu.cc/search',elapsedMs:10}],
       fieldChecks:[{field:'chapterListUrl',rule:'//a/@href',status:'multiple-values',normalization:'response-url',note:'URL 为单值字段',matches:1,context:'list-node',
         contexts:[{index:0,matches:1,samples:['<img src=x onerror=alert(1)>'],resolvedUrls:['https://www.myshu.cc/book/1/']}]}]}],
@@ -35,6 +36,10 @@ async function run(){
   assert.equal(details.open,false,'technical evidence stays collapsed by default');
   assert(details.textContent.includes('列表条目 1'));
   assert(details.textContent.includes('字符编码：utf-8'));
+  assert(details.textContent.includes('已应用配置请求头：User-Agent'));
+  assert(details.textContent.includes('未发送请求头：Authorization'));
+  assert(details.textContent.includes('GET 关键词编码：gbk'));
+  assert(details.textContent.includes('未执行 nextPageUrl：尚未检查后续分页'));
   assert(details.textContent.includes('地址传递：bookDetail.chapterListUrl → https://www.myshu.cc/toc/1/'));
   assert(details.textContent.includes('相对地址按该页最终响应 URL 解析'));
   assert(d.getElementById('aiRepairProblem').value.includes('URL 为单值字段'));

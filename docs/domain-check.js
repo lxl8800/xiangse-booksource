@@ -23,7 +23,7 @@
     }
     if(!request)return {};
     var descriptor=window.ConverterLib?.describeStaticGetRequest?.(request);
-    if(!descriptor||/,\s*\{/.test(descriptor.url))return {searchProbeSkipped:'unsupported-search'};
+    if(!descriptor||Object.keys(descriptor.httpHeaders||{}).length||Object.keys(converted?.httpHeaders||{}).length||Object.keys(converted?.searchBook?.httpHeaders||{}).length||converted?.searchBook?.requestParamsEncode||converted?.requestParamsEncode||/,\s*\{/.test(descriptor.url))return {searchProbeSkipped:'unsupported-search'};
     try{
       var url=new URL(descriptor.url,converted?.searchBook?.host||converted?.sourceUrl);
       if(url.username||url.password||[...url.searchParams.keys()].some(key=>/token|api[_-]?key|secret|password|cookie|authorization|signature|session|credential|^(?:auth|auth[_-]?code|access[_-]?key|bearer)$/i.test(key)))

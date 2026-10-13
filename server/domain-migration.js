@@ -39,7 +39,7 @@ function staticSearch(original, template, keyword='斗破苍穹',skipped){
     ?'搜索地址含认证信息，域名检查不发送凭据':'搜索请求无法静态识别为 GET，未执行其脚本或请求配置'};
   if(typeof template!=='string'||!template.trim())return {requested:false};
   const descriptor=describeStaticGetRequest(template);
-  if(!descriptor||/,\s*\{/.test(descriptor.url))return {requested:true,reason:'搜索请求无法静态识别为普通 GET，不执行脚本或额外请求配置'};
+  if(!descriptor||Object.keys(descriptor.httpHeaders||{}).length||/,\s*\{/.test(descriptor.url))return {requested:true,reason:'搜索请求无法静态识别为普通 GET，不执行脚本或额外请求配置'};
   let raw=descriptor.url.trim();
   if(raw.length>2000)return {requested:true,reason:'搜索地址超出长度限制'};
   raw=raw.replace(/\{\{key\}\}|%@keyWord/gi,()=>encodeURIComponent(String(keyword).slice(0,50)))

@@ -115,7 +115,7 @@
     if(!view || !list)return;
     list.textContent='';
     view.hidden=false;
-    el('aiWebEvidenceIntro').textContent=(evidence.site||'书源网站')+' · 搜索：'+(evidence.keyword||'')+' · '+(evidence.fullyVerified?'服务器静态网页四步检测通过（不等于 iOS 实测）':'存在失败或无法验证的环节，不能认定修复成功');
+    el('aiWebEvidenceIntro').textContent=(evidence.site||'书源网站')+' · 搜索：'+(evidence.keyword||'')+' · '+(evidence.fullyVerified?'服务器静态网页四步样本检测通过（仍需 iOS 实测）':evidence.httpChainVerified?'HTTP 四步样本已完成，部分规则或分页尚未验证':'存在失败或无法验证的环节，不能认定修复成功');
     (evidence.steps||[]).forEach(function(step){
       var item=stringElement('div','','ai-web-step');
       item.dataset.status=step.status||'unknown';
@@ -137,6 +137,13 @@
       if(step.handoff)evidenceLines.push('地址传递：'+step.handoff.from+(step.handoff.value?' → '+step.handoff.value:''));
       if(step.kind)evidenceLines.push('响应类型：'+step.kind+'，响应字节：'+(step.bytes||0));
       if(step.charset)evidenceLines.push('字符编码：'+step.charset+'（'+(step.charsetSource||'响应声明')+'）');
+      if(step.requestCapabilities){
+        var request=step.requestCapabilities;
+        evidenceLines.push('已应用配置请求头：'+((request.headersApplied||[]).join('、')||'无')+'（仅记录名称）');
+        if(request.headersSkipped?.length)evidenceLines.push('未发送请求头：'+request.headersSkipped.join('、'));
+        evidenceLines.push('GET 关键词编码：'+request.requestEncoding+'；响应配置编码：'+request.responseEncoding);
+        (request.unchecked||[]).forEach(function(x){evidenceLines.push('未执行 '+x.field+'：'+x.reason);});
+      }
       if(step.bodyTruncated||step.extractionTruncated)evidenceLines.push('内容受到检测预算限制，不能据此认定完整验证。');
       (step.redirects||[]).forEach(function(x){evidenceLines.push('重定向 HTTP '+x.status+'：'+(x.url||x.from)+' → '+(x.location||x.to)+'；耗时 '+(x.elapsedMs||0)+'ms'+(x.reason?'；'+x.reason:''));});
       (step.searchAttempts||[]).forEach(function(x){evidenceLines.push('尝试：'+(x.httpStatus?'HTTP '+x.httpStatus:x.status)+' '+(x.url||'')+' '+(x.reason||''));});

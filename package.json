@@ -2,7 +2,7 @@
   "name": "xiangse-booksource",
   "private": true,
   "type": "module",
-  "version": "1.8.4",
+  "version": "1.8.5",
   "scripts": {
     "start": "node server/index.js",
     "test": "node --test server/tests/*.test.js"
@@ -12,6 +12,7 @@
     "express": "5.1.0",
     "ipaddr.js": "2.2.0",
     "jsdom": "26.1.0",
-    "undici": "7.16.0"
+    "undici": "7.16.0",
+    "iconv-lite": "0.7.3"
   }
 }

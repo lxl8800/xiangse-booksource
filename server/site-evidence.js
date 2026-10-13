@@ -8,7 +8,8 @@
  */
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
-const { describeStaticGetRequest } = createRequire(import.meta.url)('../converter/lib/urlRule.js');
+const { splitUrlOptions } = createRequire(import.meta.url)('../converter/lib/urlRule.js');
+import {buildGetPlan} from './request-plan.js';
 const {resolveHref,describeLinkRule}=createRequire(import.meta.url)('../converter/lib/linkRule.js');
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -66,41 +67,36 @@ function selectedXsgg(payload, selectedName) {
 }
 
 function searchRequest(legado, source, keyword) {
-  const raw=source ? null : legado?.searchUrl;
-  if (typeof raw==='string' && raw.trim()) {
-    // The optional ", {charset:...}" Legado request configuration is data,
-    // never JS code; we only extract the plain URL portion.
-    const template=raw.split(/,\s*\{/)[0].trim();
-    if(template.startsWith('@js:') || template.includes('<js>') || template.includes('{{') && !/\{\{(?:key|page)\}\}/.test(template))return {reason:'搜索地址使用自定义 JavaScript，静态 HTTP 检测不执行脚本'};
-    const substituted=template.replace(/\{\{key\}\}/gi,encodeURIComponent(keyword)).replace(/\{\{page\}\}/gi,'1');
-    if(/\{\{/.test(substituted))return {reason:'搜索 URL 使用无法静态展开的模板变量'};
-    return {url:substituted};
-  }
-  const requestInfo=source?.searchBook?.requestInfo;
-  const descriptor=describeStaticGetRequest(requestInfo);
-  if(descriptor && /^\/?(?:https?:\/\/|[^@\s]*\/)/.test(descriptor.url)) {
-    const req=descriptor.url.replace(/%@keyWord/g,encodeURIComponent(keyword)).replace(/%@pageIndex/g,'1');
-    if(!req.includes('%@'))return {url:req,staticRequest:descriptor.generated?'converter-get-template':'plain-get',forbidCookie:descriptor.forbidCookie};
-  }
-  return {reason:'此书源搜索 URL 需要执行 App 侧动态 JS（安全起见不在服务器执行）'};
+  if(source)return buildGetPlan({source,action:source.searchBook||{},origin:new URL(source.sourceUrl).origin,keyword});
+  const raw=legado?.searchUrl;
+  if(typeof raw!=='string'||!raw.trim())return {reason:'缺少可静态识别的搜索地址'};
+  const split=splitUrlOptions(raw),options=split.options||{};
+  if(split.error)return {reason:split.error};
+  if(options.method&&String(options.method).toUpperCase()!=='GET'||options.body||options.webView||options.js)return {reason:'Legado 请求包含 POST、请求体或动态执行配置，不将它静默当成 GET'};
+  let template=split.url.trim();
+  if(/@js:|<js>/.test(template))return {reason:'搜索地址使用自定义 JavaScript，静态 HTTP 检测不执行脚本'};
+  template=template.replace(/\{\{key\}\}/gi,'%@keyWord').replace(/\{\{page\}\}/gi,'%@pageIndex');
+  if(/\{\{/.test(template))return {reason:'搜索 URL 使用无法静态展开的模板变量'};
+  return buildGetPlan({source:{httpHeaders:legado.header},action:{requestInfo:template,httpHeaders:options.headers,
+    ...(options.charset?{requestParamsEncode:options.charset,responseEncode:options.charset}:{})},
+    origin:new URL(legado.bookSourceUrl).origin,keyword});
+}
+function actionRequest(action,seed,origin,keyword,source){
+  return buildGetPlan({source,action:action||{},seed,origin,keyword});
+}
+function equivalentResponseConfig(before,after){
+  const headers=plan=>Object.entries(plan?.headers||{}).sort(([a],[b])=>a.localeCompare(b));
+  return before?.responseEncoding===after?.responseEncoding&&JSON.stringify(headers(before))===JSON.stringify(headers(after));
+}
+function withinBudget(promise,signal){
+  return new Promise((resolve,reject)=>{
+    const abort=()=>{const error=new Error('连接超时');error.name='AbortError';reject(error);};
+    if(signal.aborted){Promise.resolve(promise).catch(()=>{});abort();return;}
+    signal.addEventListener('abort',abort,{once:true});
+    Promise.resolve(promise).then(resolve,reject).finally(()=>signal.removeEventListener('abort',abort));
+  });
 }
 
-function actionRequest(action,seed,origin,keyword){
-  const rule=action?.requestInfo;
-  const missing=typeof rule!=='string'||!rule.trim();
-  const descriptor=missing?{url:'%@result'}:describeStaticGetRequest(rule);
-  if(!descriptor)return {reason:'requestInfo 为无法静态识别的动态请求；不执行脚本，也不沿用其他动作的地址'};
-  let template=descriptor.url;
-  const usedResult=template.includes('%@result');
-  if(usedResult&&!seed)return {reason:'请求依赖上一动作的 URL，但未取得一个有效的地址'};
-  template=template.replace(/%@result/g,()=>seed||'').replace(/%@keyWord/g,()=>encodeURIComponent(keyword)).replace(/%@pageIndex/g,'1');
-  if(template.includes('%@'))return {reason:'请求包含无法静态展开的占位符'};
-  try{
-    const resolved=new URL(template,action?.host||origin);
-    return {url:resolved.href,requestInfoMissing:missing,usedResult,
-      staticRequest:descriptor.generated?'converter-get-template':'plain-get',forbidCookie:!!descriptor.forbidCookie};
-  }catch{return {reason:'动作请求无法解析为一个 URL'};}
-}
 function evaluateField(doc,context,rule,count=3){
   const known=describeLinkRule(rule);
   const parsed=splitXPathPipeline(rule);
@@ -316,7 +312,8 @@ function fieldValue(doc,node,rule) {
   return tiny(target.textContent,250);
 }
 
-async function downloadSite(url, origin, { fetcher, dnsChecker=checkPublicDns, timeoutMs=7800, maxBytes=MAX_HTML_BYTES }={}) {
+async function downloadSite(url, origin, { fetcher, dnsChecker=checkPublicDns, timeoutMs=7800, maxBytes=MAX_HTML_BYTES, plan }={}) {
+  if(plan?.reason)return {url,requestMethod:"GET",status:"unsupported",reason:plan.reason};
   let safe=safeTarget(url,origin);
   const ctl=new AbortController();
   const started=Date.now();
@@ -328,11 +325,11 @@ async function downloadSite(url, origin, { fetcher, dnsChecker=checkPublicDns, t
     let response,responseElapsedMs=0;
     for(let i=0;i<3;i++){
       const hopStarted=Date.now();
-      await dnsChecker(safe);
-      response=await (fetcher || makeSafeFetch(safe.origin,{allowHttp:true,allowRedirectResponse:true}))(safe.href,{
+      await withinBudget(dnsChecker(safe),ctl.signal);
+      response=await withinBudget((fetcher || makeSafeFetch(safe.origin,{allowHttp:true,allowRedirectResponse:true}))(safe.href,{
         method:'GET',signal:ctl.signal,redirect:'manual',
-        headers:{'User-Agent':USER_AGENT,Accept:'text/html,application/xhtml+xml,application/json;q=0.8,*/*;q=0.4'}
-      });
+        headers:{'User-Agent':USER_AGENT,Accept:'text/html,application/xhtml+xml,application/json;q=0.8,*/*;q=0.4',...plan?.headers}
+      }),ctl.signal);
       responseElapsedMs=Date.now()-hopStarted;
       if(response.status>=300 && response.status<400){
         const location=response.headers?.get?.('location');
@@ -346,7 +343,7 @@ async function downloadSite(url, origin, { fetcher, dnsChecker=checkPublicDns, t
         redirects.push({from:safe.origin,to:target?.origin||null,url:redactUrl(safe.href),
           location:target?redactUrl(target.href):null,status:response.status,elapsedMs:responseElapsedMs,
           ...(reason?{reason}:{})});
-        await response.body?.cancel();
+        await withinBudget(response.body?.cancel(),ctl.signal);
         if(reason||i>=2)return {url:safe.href,originalUrl:initialUrl,requestMethod:'GET',redirects,
           elapsedMs:Date.now()-started,status:'redirect',httpStatus:response.status,
           reason:reason||'重定向次数超出限制'};
@@ -354,26 +351,26 @@ async function downloadSite(url, origin, { fetcher, dnsChecker=checkPublicDns, t
       }
       break;
     }
-    const result=responseInfo={responseElapsedMs,url:safe.href,originalUrl:initialUrl,requestMethod:'GET',redirects,elapsedMs:Date.now()-started,httpStatus:response.status,kind:decodeKind(response),contentType:tiny(response.headers?.get?.('content-type'),160)};
-    if(response.status<200||response.status>=300){await response.body?.cancel();return {...result,status:response.status===403?'blocked':'http-error',reason:'网站响应 HTTP '+response.status};}
+    const result=responseInfo={responseElapsedMs,url:safe.href,originalUrl:initialUrl,requestMethod:'GET',redirects,elapsedMs:Date.now()-started,httpStatus:response.status,kind:decodeKind(response),contentType:tiny(response.headers?.get?.('content-type'),160),requestCapabilities:plan?.requestCapabilities};
+    if(response.status<200||response.status>=300){await withinBudget(response.body?.cancel(),ctl.signal);return {...result,status:response.status===403?'blocked':'http-error',reason:'网站响应 HTTP '+response.status};}
     const reportedSize=Number(response.headers?.get?.('content-length') || 0);
-    if(reportedSize>maxBytes){await response.body?.cancel();return {...result,status:'unsupported',reason:'响应内容超出安全检测的 HTML 大小限制'};}
+    if(reportedSize>maxBytes){await withinBudget(response.body?.cancel(),ctl.signal);return {...result,status:'unsupported',reason:'响应内容超出安全检测的 HTML 大小限制'};}
     const chunks=[];let size=0;
     if(response.body && typeof response.body.getReader==='function'){
       const reader=response.body.getReader();
-      try {while(true){const next=await reader.read();if(next.done)break;size+=next.value.byteLength;if(size>maxBytes){await reader.cancel();return {...result,status:'unsupported',reason:'响应内容过大，超过 '+maxBytes+' 字节'};}chunks.push(next.value);}}finally{try{reader.releaseLock();}catch{}}
-    } else if(response.text){const bytes=new TextEncoder().encode(await response.text());size=bytes.length;if(size>maxBytes)return {...result,status:'unsupported',reason:'响应过大'};chunks.push(bytes);}
+      try {while(true){const next=await withinBudget(reader.read(),ctl.signal);if(next.done)break;size+=next.value.byteLength;if(size>maxBytes){await withinBudget(reader.cancel(),ctl.signal);return {...result,status:'unsupported',reason:'响应内容过大，超过 '+maxBytes+' 字节'};}chunks.push(next.value);}}finally{try{reader.releaseLock();}catch{}}
+    } else if(response.text){const bytes=new TextEncoder().encode(await withinBudget(response.text(),ctl.signal));size=bytes.length;if(size>maxBytes)return {...result,status:'unsupported',reason:'响应过大'};chunks.push(bytes);}
     const bytes=Buffer.concat(chunks.map(x=>Buffer.from(x)));
     const headerCharset=String(response.headers?.get?.('content-type')||'').match(/charset\s*=\s*["']?([\w-]+)/i)?.[1];
     const metas=bytes.subarray(0,4096).toString('latin1').match(/<meta\b[^>]*>/gi)||[];
     const metaCharset=metas.map(x=>x.match(/charset\s*=\s*["']?([\w-]+)/i)?.[1]).find(Boolean);
-    const requestedCharset=headerCharset||metaCharset||'utf-8';
+    const requestedCharset=plan?.responseEncoding||headerCharset||metaCharset||'utf-8';
     let decoder;
     try{decoder=new TextDecoder(requestedCharset,{fatal:false});}
     catch{return {...result,status:'unsupported',bytes:size,charset:requestedCharset,reason:'当前解码器不支持响应字符编码 '+tiny(requestedCharset,40)};}
     const body=decoder.decode(bytes);
     return {...result,status:'ok',elapsedMs:Date.now()-started,charset:decoder.encoding,
-      charsetSource:headerCharset?'content-type':metaCharset?'html-meta':'default',
+      charsetSource:plan?.responseEncoding?'source-config':headerCharset?'content-type':metaCharset?'html-meta':'default',
       bytes:size,bodyTruncated:body.length>MAX_DOCUMENT_LENGTH,body:body.slice(0,MAX_DOCUMENT_LENGTH)};
   }catch(error){
     const msg=String(error?.message||'');
@@ -400,10 +397,11 @@ async function inspectSourceWebRaw(input,{fetcher,dnsChecker=checkPublicDns,time
   if(!keyword)throw new Error('搜索关键词不能为空');
   const steps=[];
   const configuredSearch=searchRequest(legado,source,keyword);
-  const search=configuredSearch.url ? configuredSearch : searchRequest(legado,null,keyword);
-  const homepagePromise=downloadSite(url.href,origin,{fetcher,dnsChecker,timeoutMs});
+  const search=configuredSearch.url||!legado ? configuredSearch : searchRequest(legado,null,keyword);
+  const homepagePlan=buildGetPlan({source:source||{httpHeaders:legado?.header},action:{requestInfo:url.href},origin,keyword});
+  const homepagePromise=downloadSite(url.href,origin,{fetcher,dnsChecker,timeoutMs,plan:homepagePlan});
   const searchPromise=search.url
-    ?downloadSite(search.url,origin,{fetcher,dnsChecker,timeoutMs}).catch(error=>({status:'unsupported',reason:tiny(error.message)}))
+    ?downloadSite(search.url,origin,{fetcher,dnsChecker,timeoutMs,plan:search}).catch(error=>({status:'unsupported',reason:tiny(error.message)}))
     :Promise.resolve({status:'unsupported',reason:search.reason});
   const [home,firstSearch]=await Promise.all([homepagePromise,searchPromise]);
   let searchResult=firstSearch;
@@ -414,7 +412,8 @@ async function inspectSourceWebRaw(input,{fetcher,dnsChecker=checkPublicDns,time
   // Actual HTML form fields are stronger evidence than legacy guessed URLs.
   // Only retry when the configured route fails or does not exist.
   if((searchResult.status!=='ok'||searchResult.kind!=='html')&&discoveredForm&&discoveredForm.url!==searchResult.url){
-    const attempted=await downloadSite(discoveredForm.url,origin,{fetcher,dnsChecker,timeoutMs}).catch(e=>({status:'unsupported',reason:tiny(e.message)}));
+    const discoveredPlan=buildGetPlan({source:source||{},action:{...(source?.searchBook||{}),requestInfo:discoveredForm.url},origin,keyword});
+    const attempted=await downloadSite(discoveredForm.url,origin,{fetcher,dnsChecker,timeoutMs,plan:discoveredPlan}).catch(e=>({status:'unsupported',reason:tiny(e.message)}));
     searchAttempts.push(recordSearchAttempt(attempted,'网页表单自动发现'));
     if(attempted.status==='ok'&&attempted.kind==='html'){
       searchResult=attempted;
@@ -511,10 +510,10 @@ async function inspectSourceWebRaw(input,{fetcher,dnsChecker=checkPublicDns,time
   let detailUrl;
   let selectedBookUrl,detailRequest;
   try{selectedBookUrl=new URL(bookUrl,searchResult.url).href;
-    detailRequest=source?actionRequest(source.bookDetail,selectedBookUrl,origin,keyword):{url:selectedBookUrl};
+    detailRequest=source?actionRequest(source.bookDetail,selectedBookUrl,origin,keyword,source):{url:selectedBookUrl};
     if(!detailRequest.url)throw Error(detailRequest.reason);detailUrl=safeTarget(detailRequest.url,origin).href;}
   catch(err){steps.push({step:'detail',status:'unsupported',reason:tiny(err.message)});steps.push(skipStep('chapterList','详情地址不被允许'));steps.push(skipStep('chapterContent','详情地址不被允许'));return {sourceName:source?.sourceName||'书源',site:origin,keyword,verifiedAt:new Date().toISOString(),steps,diagnostics,fullyVerified:false,depth:'live-static-dom'};}
-  const detail=await downloadSite(detailUrl,origin,{fetcher,dnsChecker,timeoutMs});
+  const detail=await downloadSite(detailUrl,origin,{fetcher,dnsChecker,timeoutMs,plan:detailRequest});
   const detailStep={...reportStep('detail',detail),requestInfoMissing:!!detailRequest.requestInfoMissing,
     handoff:{from:detailRequest.usedResult===false?'bookDetail.requestInfo':'searchBook.detailUrl',value:redactUrl(detailRequest.usedResult===false?detailRequest.url:selectedBookUrl)}};
   if(detail.status!=='ok'||detail.kind!=='html'){
@@ -530,7 +529,7 @@ async function inspectSourceWebRaw(input,{fetcher,dnsChecker=checkPublicDns,time
   steps.push(detailStep);
   const declaredCatalog=source?.bookDetail?.chapterListUrl;
   const seed=declaredCatalog?catalogSeed(detailDoc,declaredCatalog):{url:detail.url};
-  const tocRequest=source?actionRequest(source.chapterList,seed.url,origin,keyword):{url:seed.url};
+  const tocRequest=source?actionRequest(source.chapterList,seed.url,origin,keyword,source):{url:seed.url};
   if(!tocRequest.url){
     steps.push({step:'chapterList',status:seed.status||'unsupported',reason:seed.reason||tocRequest.reason});
     steps.push(skipStep('chapterContent','目录地址未验证，不推断后续正文'));
@@ -539,9 +538,9 @@ async function inspectSourceWebRaw(input,{fetcher,dnsChecker=checkPublicDns,time
   let toc;
   try{
     const target=safeTarget(tocRequest.url,origin).href;
-    toc=target===detail.url?detail:await downloadSite(target,origin,{fetcher,dnsChecker,timeoutMs});
+    toc=target===detail.url&&equivalentResponseConfig(detailRequest,tocRequest)?detail:await downloadSite(target,origin,{fetcher,dnsChecker,timeoutMs,plan:tocRequest});
   }catch(error){toc={status:'unsupported',reason:tiny(error.message)};}
-  const tocRequestStep={...reportStep('chapterList',toc),requestInfoMissing:!!tocRequest.requestInfoMissing,
+  const tocRequestStep={...reportStep('chapterList',toc),requestInfoMissing:!!tocRequest.requestInfoMissing,requestCapabilities:tocRequest.requestCapabilities,
     reusedResponse:toc===detail,handoff:{from:tocRequest.usedResult===false?'chapterList.requestInfo':declaredCatalog?'bookDetail.chapterListUrl':'bookDetail.responseUrl',
       ...(tocRequest.usedResult===false?{value:redactUrl(tocRequest.url)}:seed.url?{value:redactUrl(seed.url)}:{})}};
   if(toc.status!=='ok'||toc.kind!=='html'){
@@ -581,10 +580,10 @@ async function inspectSourceWebRaw(input,{fetcher,dnsChecker=checkPublicDns,time
   let chapterAddress;
   let selectedChapterUrl,contentRequest;
   try{selectedChapterUrl=new URL(chapterUrl,toc.url).href;
-    contentRequest=source?actionRequest(source.chapterContent,selectedChapterUrl,origin,keyword):{url:selectedChapterUrl};
+    contentRequest=source?actionRequest(source.chapterContent,selectedChapterUrl,origin,keyword,source):{url:selectedChapterUrl};
     if(!contentRequest.url)throw Error(contentRequest.reason);chapterAddress=safeTarget(contentRequest.url,origin).href;}
   catch(err){steps.push({step:'chapterContent',status:'unsupported',reason:tiny(err.message)});return {sourceName:source?.sourceName||'书源',site:origin,keyword,verifiedAt:new Date().toISOString(),steps,diagnostics,fullyVerified:false,depth:'live-static-dom'};}
-  const chapter=await downloadSite(chapterAddress,origin,{fetcher,dnsChecker,timeoutMs});
+  const chapter=await downloadSite(chapterAddress,origin,{fetcher,dnsChecker,timeoutMs,plan:contentRequest});
   const chapterStep={...reportStep('chapterContent',chapter),requestInfoMissing:!!contentRequest.requestInfoMissing,
     handoff:{from:contentRequest.usedResult===false?'chapterContent.requestInfo':'chapterList.url',value:redactUrl(contentRequest.usedResult===false?contentRequest.url:selectedChapterUrl)}};
   if(chapter.status==='ok'&&chapter.kind==='html'){
@@ -617,17 +616,12 @@ async function inspectSourceWebRaw(input,{fetcher,dnsChecker=checkPublicDns,time
   const staticRulesMatch=steps.filter(x=>['search','chapterList','chapterContent'].includes(x.step))
     .every(x=>(x.configuredMatches??x.count??0)>0);
   const fieldRulesMatch=steps.every(x=>(x.fieldChecks||[]).every(f=>f.status==='ok'));
-  const unsupportedRequests=source && (steps.some(x=>x.requestInfoMissing)||
-    ['searchBook','bookDetail','chapterList','chapterContent'].some(k=>{
-      const action=source[k]||{};
-      return action.parserID&&action.parserID!=='DOM'||action.responseFormatType&&action.responseFormatType!=='html'||
-        action.webView||action.webViewSniff||action.webViewContentRules||action.webViewJs||
-        ['JSParser','requestJavascript','responseJavascript','requestFunction','responseFunction'].some(key=>action[key])||
-        Object.keys(action.httpHeaders||{}).length>0||Object.keys(action.httpParams||{}).length>0||
-        action.requestParamsEncode&&!/^(utf-?8)$/i.test(action.requestParamsEncode);
-    }));
+  const unsupportedRequests=source && steps.filter(x=>x.step!=='homepage').some(x=>x.requestInfoMissing||x.requestCapabilities?.unchecked?.length);
+  for(const step of steps){
+    for(const item of step.requestCapabilities?.unchecked||[])diagnostics.push(step.step+'.'+item.field+'：'+item.reason);
+  }
   const fullyVerified=httpChainVerified&&staticRulesMatch&&fieldRulesMatch&&!unsupportedRequests&&!legado&&!searchStep.recoveredRequest&&!steps.some(x=>x.bodyTruncated||x.extractionTruncated);
-  if(unsupportedRequests)diagnostics.push('动作缺少 requestInfo，或声明的解析器、WebView、请求钩子、请求头/参数、特殊编码尚未执行，当前 HTTP 链不能证明配置可用');
+  if(unsupportedRequests)diagnostics.push('部分请求能力或分页未执行，见逐项诊断；当前 HTTP 链不能证明完整配置可用');
   if(searchStep.recoveredRequest)diagnostics.push('搜索请求使用网页表单替代了失败的配置；原配置未通过，须用修复候选独立复测');
   if(legado)diagnostics.push('附带原始 Legado 的检测用于发现问题；修复通过必须使用纯 XSGG 配置独立验证');
   if(httpChainVerified&&!staticRulesMatch)diagnostics.push('已从真实网页自动识别完整阅读链，但原 XSGG 规则不能直接匹配全部步骤；生成候选后必须再次验证');

@@ -1,3 +1,5 @@
+import {createRequire} from 'node:module';
+const {describeStaticGetRequest}=createRequire(import.meta.url)('../converter/lib/urlRule.js');
 /** Bounded, read-only evidence formatting. Does not execute any rule. */
 const SENSITIVE=/token|api[_-]?key|secret|password|cookie|authorization|signature|session|credential/i;
 export function redactText(value) {
@@ -41,6 +43,10 @@ export function sanitizeEvidence(report,source) {
   function inspect(value,key=''){
     if(++visited>2000)return;
     if(typeof value==='string'){
+      if(key==='requestInfo'){
+        const request=describeStaticGetRequest(value);
+        if(request?.httpHeaders)inspect(request.httpHeaders,'httpHeaders');
+      }
       if(SENSITIVE.test(key)){
         remember(value);
         if(/authorization/i.test(key))remember(value.replace(/^(?:Bearer|Basic)\s+/i,''));
@@ -72,5 +78,5 @@ export function sanitizeEvidence(report,source) {
     if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).slice(0,80).map(([key,item])=>[key,clean(item,depth+1)]));
     return value;
   }
-  return clean({...report,reportVersion:1,appVerified:false});
+  return clean({...report,reportVersion:1,verificationScope:'single-book-first-chapter-static-html',appVerified:false});
 }

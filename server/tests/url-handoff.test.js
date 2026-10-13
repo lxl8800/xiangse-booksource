@@ -113,7 +113,9 @@ test('all three actions use their configured static GET requests instead of fall
     if(path==='/static/body.html')return ok(chapterBody);
     return fixtures(url);
   });
-  assert.equal(report.fullyVerified,true);
+  assert.equal(report.httpChainVerified,true);
+  assert.equal(report.fullyVerified,false,'page-index template is only tested on page one');
+  assert(report.steps[3].requestCapabilities.unchecked.some(x=>x.field==='requestInfo.pageIndex'));
   for(const step of report.steps.slice(2))assert.equal(step.handoff.value,step.originalUrl);
   for(const step of report.steps.slice(2))assert.equal(step.handoff.from,{detail:'bookDetail',chapterList:'chapterList',chapterContent:'chapterContent'}[step.step]+'.requestInfo');
   assert(calls.includes(origin+'/static/list.html?page=1'));

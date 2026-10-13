@@ -135,10 +135,10 @@ test('meta GBK decoding is recorded and unknown charset stays unsupported rather
   assert.equal(unknown.steps[1].status,'unsupported');
   assert.equal(unknown.steps[1].httpStatus,200);
 });
-test('ignored custom headers or request encoding cannot produce a complete configuration verdict',async()=>{
+test('unknown custom headers or request encoding cannot produce a complete configuration verdict',async()=>{
   const config=source();config.searchBook.httpHeaders={'X-Custom':'abc'};
   assert.equal((await inspect(config)).fullyVerified,false);
-  delete config.searchBook.httpHeaders;config.searchBook.requestParamsEncode='GBK';
+  delete config.searchBook.httpHeaders;config.searchBook.requestParamsEncode='UNSUPPORTED-ENCODING';
   assert.equal((await inspect(config)).fullyVerified,false);
 });
 

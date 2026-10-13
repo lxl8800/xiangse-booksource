@@ -1432,6 +1432,36 @@ module.exports = {
   CRYPTOJS_PREFIX: CRYPTOJS_PREFIX
 };
 };
+__mods['requestCompat']=function(module,exports,require){
+"use strict";
+// Pure data helpers shared by the converter and the safe HTTP inspector.
+// No Node APIs and no evaluation of source-supplied JavaScript.
+function charsetLabel(value) {
+  if (value === undefined || value === null || value === "") return null;
+  var raw=String(value).trim().toLowerCase();
+  var aliases={"2147485234":"gbk","2147485232":"gb2312","utf8":"utf-8","utf-8":"utf-8","gbk":"gbk","gb2312":"gb2312"};
+  return Object.prototype.hasOwnProperty.call(aliases,raw)?aliases[raw]:null;
+}
+function parseHeaderData(value) {
+  if(value===undefined||value===null||value==="")return {headers:{}};
+  if(typeof value==="string"){
+    if(value.length>4096)return {reason:"请求头 JSON 超出大小限制"};
+    try{value=JSON.parse(value);}catch(e){return {reason:"请求头不是可静态解析的 JSON 对象"};}
+  }
+  if(!value||typeof value!=="object"||Array.isArray(value))return {reason:"请求头必须是对象或 JSON 对象字符串"};
+  var keys=Object.keys(value);
+  if(keys.length>24)return {reason:"请求头字段过多"};
+  var headers={};
+  for(var i=0;i<keys.length;i++){
+    var key=keys[i],item=value[key];
+    if(!/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(key)||typeof item!=="string"||item.length>2048)return {reason:"请求头名称或值不是受限的静态字符串"};
+    Object.defineProperty(headers,key,{value:item,enumerable:true,writable:true,configurable:true});
+  }
+  return {headers:headers};
+}
+module.exports={charsetLabel:charsetLabel,parseHeaderData:parseHeaderData};
+
+};
 __mods['urlRule']=function(module,exports,require){
 "use strict";
 /*
@@ -1445,6 +1475,7 @@ __mods['urlRule']=function(module,exports,require){
 
 var utils = require("./utils");
 var jsRule = require("./jsRule");
+var requestCompat = require("./requestCompat");
 
 var escStr = utils.escStr;
 
@@ -1866,17 +1897,35 @@ function expandOptionalPrefix(urlStr) {
 
 // Recognize only data-only GET grammar emitted by the converter. Never execute input.
 function describeStaticGetRequest(rule) {
-  if (typeof rule !== "string" || rule.length > 4000) return null;
-  var raw = rule.trim(), forbidCookie = false, generated = false;
+  if (typeof rule !== "string" || rule.length > 6000) return null;
+  var raw=rule.trim(),forbidCookie=false,generated=false,headers=null;
   if (/^@js:/i.test(raw)) {
-    var match = raw.match(/^@js:\s*(?:let|var|const)\s+url\s*=\s*`([^`\\]*)`;\s*return\s+\{\s*url:\s*url(?:,\s*forbidCookie:\s*(true|false))?\s*\};?\s*$/);
-    if (!match) return null;
-    raw = match[1]; forbidCookie = match[2] === "true"; generated = true;
-    raw = raw.replace(/\$\{params\.keyWord\}/g, "%@keyWord").replace(/\$\{params\.pageIndex\}/g, "%@pageIndex");
+    var match=raw.match(/^@js:\s*(?:let|var|const)\s+url\s*=\s*`([^`\\]*)`;\s*(?:(?:let|var|const)\s+httpHeaders\s*=\s*(\{[\s\S]*?\})\s*;\s*)?return\s+\{\s*url:\s*url([^{}]*)\};?\s*$/);
+    if(!match)return null;
+    var fields=match[3].trim(),seen={};
+    if(fields){
+      if(fields.charAt(0)!==",")return null;
+      var parts=fields.slice(1).split(",");
+      for(var i=0;i<parts.length;i++){
+        var field=parts[i].trim(),cookie=field.match(/^forbidCookie\s*:\s*(true|false)$/);
+        if(cookie&&!seen.cookie){forbidCookie=cookie[1]==="true";seen.cookie=true;}
+        else if(/^httpHeaders\s*:\s*httpHeaders$/.test(field)&&!seen.headers){seen.headers=true;}
+        else return null;
+      }
+    }
+    if(!!match[2]!==!!seen.headers)return null;
+    if(match[2]){
+      var parsed=requestCompat.parseHeaderData(match[2]);
+      if(parsed.reason)return null;headers=parsed.headers;
+    }
+    raw=match[1];generated=true;
+    raw=raw.replace(/\$\{params\.keyWord\}/g,"%@keyWord").replace(/\$\{params\.pageIndex\}/g,"%@pageIndex");
   }
   if (/@js:|<js>|\$\{|javascript:/i.test(raw)) return null;
   if (!raw || /[\r\n`]/.test(raw)) return null;
-  return { url: raw, method: "GET", forbidCookie: forbidCookie, generated: generated };
+  var result={url:raw,method:"GET",forbidCookie:forbidCookie,generated:generated};
+  if(headers!==null)result.httpHeaders=headers;
+  return result;
 }
 
 // Rewrite only the literal origin of a statically recognized GET request.

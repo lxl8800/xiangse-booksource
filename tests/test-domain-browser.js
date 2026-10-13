@@ -47,7 +47,7 @@ async function test(){
  assert(w.BooksourceDomainCheck);
  assert.equal(d.getElementById('autoDomainProbe').checked,true);
  const raw={bookSourceName:'测试迁移',bookSourceUrl:'https://legacy-books.testsource',
-   bookSourceType:0,header:'{"Cookie":"SECRET_COOKIE"}',searchUrl:'/s?q={{key}}',
+   bookSourceType:0,header:'',searchUrl:'/s?q={{key}}',
    ruleSearch:{bookList:'.item',name:'h3@text',bookUrl:'a@href'},
    ruleToc:{chapterList:'#list a',chapterName:'text',chapterUrl:'href'},
    ruleContent:{content:'#content@text'}};
@@ -59,7 +59,7 @@ async function test(){
  assert.equal(current().sourceUrl,'https://modern-books.testsource');
  assert.equal(current().searchBook.host,'https://modern-books.testsource');
  assert(current().searchBook.requestInfo.startsWith('https://modern-books.testsource/s'));
- assert.equal(current().searchBook.httpHeaders.Cookie,'SECRET_COOKIE','keys were not modified');
+ assert.equal(current().searchBook.httpHeaders,undefined);
  assert(d.getElementById('domainCheckStatus').textContent.includes('更新 1 条'));
  mode='needs-confirmation';
  d.getElementById('input').value=JSON.stringify(raw);
@@ -81,10 +81,16 @@ async function test(){
  expectedSkip='unsupported-search';
  d.getElementById('input').value=JSON.stringify({...raw,searchUrl:'/s,{"method":"POST","body":"key={{key}}"}'});
  w.doConvert();await new Promise(resolve=>setTimeout(resolve,35));assert.equal(calls.length,5);
+
+ expectedSearch=undefined;expectedSkip='unsupported-search';
+ d.getElementById('input').value=JSON.stringify({...raw,header:'{"Cookie":"SECRET_COOKIE"}'});
+ w.doConvert();await new Promise(resolve=>setTimeout(resolve,35));assert.equal(calls.length,6);
+ assert.equal(current().sourceUrl,'https://legacy-books.testsource');
+ assert.equal(current().searchBook.httpHeaders.Cookie,'SECRET_COOKIE','blocked headers remain intact in user output');
  d.getElementById('autoDomainProbe').checked=false;
  w.doConvert();
  await new Promise(resolve=>setTimeout(resolve,35));
- assert.equal(calls.length,5,'disabled probe should not send request');
+ assert.equal(calls.length,6,'disabled probe should not send request');
  assert.equal(d.getElementById('domainCheckResults').hidden,true,'old evidence cleared when probe is disabled');
  assert.equal(scriptErrors.length,0,scriptErrors.join('; '));
  console.log('PASS baseline conversion async domain verification, safe update, uncertain preservation, privacy and opt-out');
