@@ -186,6 +186,7 @@ python3 app/tools/gen-converter-bundle.py
 
 ```bash
 npm ci
+npm ci --prefix tests    # 安装锁定的浏览器测试依赖
 npm test                 # 服务端测试：固定样本，不依赖外部 DNS
 npm run test:all         # 服务端 + 转换器 + 浏览器回归
 npm run test:live        # 显式联网验收，单独保存结果
