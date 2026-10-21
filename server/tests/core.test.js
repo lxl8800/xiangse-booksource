@@ -5,7 +5,12 @@ import { streamSimple as piChatStream } from '@earendil-works/pi-ai/api/openai-c
 import { createApp } from '../index.js';
 import { parseAiBaseUrl, makeSafeFetch } from '../net-safety.js';
 import { staticSourceIssues, makeRepairCandidate, parseModelPatch, unwrapSource } from '../repair.js';
-import { API_TYPES, makePiModel, invokeModel, validatedConfig, suggestAiRepair } from '../ai.js';
+import { API_TYPES, makePiModel, invokeModel, validatedConfig as realValidatedConfig, suggestAiRepair as realSuggestAiRepair } from '../ai.js';
+
+// Test-only injection: HTTP handlers never accept a DNS bypass from request JSON.
+const isolatedDns = async () => {};
+const validatedConfig = (config, options = {}) => realValidatedConfig(config, { ...options, dnsChecker: isolatedDns });
+const suggestAiRepair = (config, input, options = {}) => realSuggestAiRepair(config, input, { ...options, dnsChecker: isolatedDns });
 
 const sample={
   sourceName:'测试书源', sourceUrl:'https://example.com',sourceType:'text',enable:1,weight:'100',
@@ -124,7 +129,6 @@ test('AI output budget: default 8192, limit 262144, reject invalid values',async
 });
 
 test('AI repair includes server-generated HTTP evidence rather than trusting the browser',async()=>{
-  const { suggestAiRepair }=await import('../ai.js');
   const actualEvidence={sourceName:'测试书源',site:'https://www.tianxiabachang.cn',keyword:'斗破苍穹',steps:[
     {step:'homepage',status:'timeout',reason:'真实 HTTP 请求超时'},
     {step:'search',status:'timeout',reason:'搜索超时'},
@@ -155,7 +159,7 @@ test('Express serves static web and transient-user-key AI endpoints',async()=>{
  const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s))});
  const base='http://127.0.0.1:'+server.address().port;
  try{
-  const ping=await fetch(base+'/api/health');assert.equal(ping.status,200);const health=await ping.json();assert.equal(health.ok,true);assert.match(health.version,/^\d+\.\d+\.\d+$/);
+  const ping=await fetch(base+'/api/health');assert.equal(ping.status,200);const health=await ping.json();assert.equal(health.ok,true);assert.match(health.version,/^\d+\.\d+\.\d+$/);assert.equal(health.build.version,health.version);assert(health.build.revision);
   const page=await fetch(base+'/');assert.equal(page.status,200);const pageText=await page.text();assert(pageText.includes('aiSettingsDialog'));
   assert.equal(page.headers.get('cache-control'),'no-store');
   const js=await fetch(base+'/ai-assistant.js');assert.equal(js.status,200);
@@ -167,4 +171,12 @@ test('Express serves static web and transient-user-key AI endpoints',async()=>{
   assert.deepEqual(seen,[['models','secret-A'],['test','secret-B'],['repair','secret-C'],['site','测试书源']]);
   assert.equal((await fetch(base+'/api/does-not-exist')).status,404);
  } finally{await new Promise(resolve=>server.close(resolve))}
+});
+
+test('DNS rejection remains enforced unless a test explicitly supplies a resolver', async()=>{
+ let checked=0;
+ const config={apiType:'openai-completions',baseUrl:'https://example.com/v1',apiKey:'fake',model:'test'};
+ await assert.rejects(realValidatedConfig(config,{dnsChecker:async()=>{checked++;throw Error('unsafe DNS');}}),/unsafe DNS/);
+ assert.equal(checked,1);
+ await assert.rejects(realValidatedConfig({...config,baseUrl:'https://127.0.0.1/v1'},{dnsChecker:isolatedDns}));
 });

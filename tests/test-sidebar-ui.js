@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const {JSDOM}=require('jsdom');
-const htmlOriginal=fs.readFileSync('docs/index.html','utf8');
+const htmlOriginal=fs.readFileSync('docs/index.html','utf8').replace('<script src="./request-state.js"></script>',()=>'<script>'+fs.readFileSync('docs/request-state.js','utf8')+'</script>');
 const bundle=fs.readFileSync('docs/converter.bundle.js','utf8');
 const html=htmlOriginal.replace('<script src="./converter.bundle.js"></script>',()=>'<script>'+bundle+'</script>');
 const updates=JSON.parse(fs.readFileSync('docs/updates.json','utf8'));

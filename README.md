@@ -179,3 +179,26 @@ python3 app/tools/gen-converter-bundle.py
 ## 许可证
 
 [MIT License](LICENSE)。完整保留上游 `Copyright (c) 2026 ljun223` 版权声明。第三方库及参考工具适用各自许可证。
+
+## 测试与构建（1.9.1）
+
+开发基线在 `/opt/xiangse-booksource`，不是旧 `/opt/legado2xsgg`。具体后续计划见 [ROADMAP.md](ROADMAP.md)。
+
+```bash
+npm ci
+npm test                 # 服务端测试：固定样本，不依赖外部 DNS
+npm run test:all         # 服务端 + 转换器 + 浏览器回归
+npm run test:live        # 显式联网验收，单独保存结果
+
+docker build --target test -t xiangse-booksource:test .
+docker run --rm --network none xiangse-booksource:test
+
+docker build --target production \
+  --build-arg APP_VERSION=1.9.1 \
+  --build-arg BUILD_REVISION="$(git rev-parse HEAD)" \
+  -t xiangse-booksource:1.9.1 .
+```
+
+测试镜像带齐 fixtures 和 `test-data`，生产镜像无需携带测试材料。`/api/health` 同时返回版本和实际构建源码摘要，避免把旧工作目录的版本当成线上状态。
+
+网站检测、自动修复、AI 候选、域名检查与文件载入均有输入快照保护。换源、清空或修改后，旧响应不可覆盖当前数据；可点击“取消当前检测”停止等待。取消不能保证撤销服务端已发出的请求或上游模型消耗。

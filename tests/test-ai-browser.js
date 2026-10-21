@@ -5,7 +5,7 @@ const {JSDOM}=require('jsdom');
 const bundle=fs.readFileSync('docs/converter.bundle.js','utf8');
 const ai=fs.readFileSync('docs/ai-assistant.js','utf8');
 const live=fs.readFileSync('docs/ai-web-probe.js','utf8');
-let html=fs.readFileSync('docs/index.html','utf8')
+let html=fs.readFileSync('docs/index.html','utf8').replace('<script src="./request-state.js"></script>',()=>'<script>'+fs.readFileSync('docs/request-state.js','utf8')+'</script>')
  .replace('<script src="./converter.bundle.js"></script>',()=>'<script>'+bundle+'</script>')
  .replace('<script src="./ai-assistant.js" defer></script>',()=>'<script>'+ai+'</script>')
  .replace('<script src="./ai-web-probe.js" defer></script>',()=>'<script>'+live+'</script>');
@@ -73,7 +73,7 @@ const updates=JSON.parse(fs.readFileSync('docs/updates.json','utf8'));
  assert.equal(stored.apiKey,'ONLY_THIS_BROWSER_SECRET');
  assert.equal(stored.baseUrl,'https://example.com/custom/v1');
  assert.equal(stored.maxTokens,262144);
- assert(!fs.readFileSync('docs/index.html','utf8').includes('ONLY_THIS_BROWSER_SECRET'));
+ assert(!fs.readFileSync('docs/index.html','utf8').replace('<script src="./request-state.js"></script>',()=>'<script>'+fs.readFileSync('docs/request-state.js','utf8')+'</script>').includes('ONLY_THIS_BROWSER_SECRET'));
  d.getElementById('aiLoadModels').click();await new Promise(r=>setTimeout(r,18));
  assert.equal(d.getElementById('aiModels').options.length,3);
  d.getElementById('aiModels').value='mock-model-2';

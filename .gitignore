@@ -30,3 +30,6 @@ backups/
 *.key
 LOCAL-DEPLOY.md
 SINGLE-CONTAINER.md
+
+# Generated inside the image, not a second source of release version
+build-info.json

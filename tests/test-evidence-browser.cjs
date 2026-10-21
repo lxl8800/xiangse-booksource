@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const {JSDOM}=require('jsdom');
-let html=fs.readFileSync('docs/index.html','utf8');
+let html=fs.readFileSync('docs/index.html','utf8').replace('<script src="./request-state.js"></script>',()=>'<script>'+fs.readFileSync('docs/request-state.js','utf8')+'</script>');
 for(const [name,defer] of [['converter.bundle.js',false],['ai-assistant.js',true],['ai-web-probe.js',true],['domain-check.js',true]]){
   html=html.replace('<script src="./'+name+'"'+(defer?' defer':'')+'></script>',()=>'<script>'+fs.readFileSync('docs/'+name,'utf8')+'</script>');
 }

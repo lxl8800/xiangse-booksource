@@ -10,6 +10,8 @@ import { inspectDomainBatch } from './domain-migration.js';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const docs = path.resolve(root, '../docs');
 const {version}=JSON.parse(fs.readFileSync(path.resolve(root,'../package.json'),'utf8'));
+const buildFile=path.resolve(root,'../build-info.json');
+const build=fs.existsSync(buildFile)?JSON.parse(fs.readFileSync(buildFile,'utf8')):{version,revision:'workspace',sourceSha256:null};
 const requests = new Map();
 let activeAi = 0;
 
@@ -35,7 +37,7 @@ export function createApp({ listModels = listApiModels, testConnection = testAiC
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     next();
   });
-  app.get('/api/health', (_, res) => res.json({ ok: true, service: 'booksource-workbench', api: true, version }));
+  app.get('/api/health', (_, res) => res.json({ ok: true, service: 'booksource-workbench', api: true, version, build }));
   app.get('/api/ai/types', (_, res) => res.json({ types: API_TYPES, localOnly: true, persistedOnServer: false }));
   app.use('/api', express.json({ limit: '150kb', strict: true }));
   const withLimit = (handler) => async (req, res) => {

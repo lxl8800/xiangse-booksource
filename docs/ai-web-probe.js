@@ -204,45 +204,53 @@
     target.className='ai-repair-status'+(error?' error':'');
   }
   async function checkSite(){
-    var button=el('aiSiteProbe');
+    var button=el('aiSiteProbe'),job=null;
     try{
       var body=visibleSource();
+      job=window.BooksourceRequests?.begin('source',function(){button.disabled=false;});
       button.disabled=true;
       status('正在实际访问网页：首页与搜索 → 详情 → 目录 → 正文。这一步不调用 AI，也不需要 API Key。');
       var response=await fetch('/api/source/check',{
         method:'POST',credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer',
-        headers:{'content-type':'application/json'},body:JSON.stringify(body)
+        headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:job?.controller.signal
       });
       var json=await response.json();
+      if(job&&!window.BooksourceRequests.current(job))return;
       if(!response.ok||!json.ok)throw Error(json.error||'网站检测失败');
       show(json.evidence);
       status(json.evidence?.fullyVerified?'四步服务器 HTTP 检测通过，仍需 iOS App 确认。':'检测完成，请查看页面中的具体 HTTP 状态与限制。');
-    }catch(error){status(error?.message||'网站检测失败',true);}
-    finally{button.disabled=false;}
+    }catch(error){if(!job||window.BooksourceRequests.current(job))status(error?.message||'网站检测失败',true);}
+    finally{if(!job||window.BooksourceRequests.owns(job))button.disabled=false;window.BooksourceRequests?.finish(job);}
   }
   async function loadThreeExamples(){
-    var button=el('aiLoadThreeExamples');
+    var button=el('aiLoadThreeExamples'),job=null;
     try{
+      job=window.BooksourceRequests?.begin('import',function(){button.disabled=false;});
       button.disabled=true;
-      var response=await fetch('./samples/three-test-sources.json',{cache:'no-store',credentials:'omit'});
+      var response=await fetch('./samples/three-test-sources.json',{cache:'no-store',credentials:'omit',signal:job?.controller.signal});
       if(!response.ok)throw Error('三条测试书源读取失败');
       var records=await response.json();
+      if(job&&!window.BooksourceRequests.current(job))return;
+      window.BooksourceRequests?.finish(job);
       if(!Array.isArray(records)||records.length!==3)throw Error('三条书源样本格式不正确');
       if(typeof window.navigateToPanel==='function')window.navigateToPanel('convert');
       el('input').value=records.map(function(x){return JSON.stringify(x,null,2);}).join('\n');
       if(!makeMergedOutput(el('input').value))throw Error('书源自动转换失败');
       el('aiProbeKeyword').value='斗破苍穹';
       status('已自动识别速读谷、柠檬小说、天天小书屋三条书源；无需输入测试问题。选择站点后点击「自动修复并复测」。');
-    }catch(error){status(error.message||'载入失败',true);}
-    finally{button.disabled=false;}
+    }catch(error){if(!job||window.BooksourceRequests.current(job))status(error.message||'载入失败',true);}
+    finally{if(!job||!job.controller.signal.aborted)button.disabled=false;window.BooksourceRequests?.finish(job);}
   }
   async function loadTestExample(){
-    var button=el('aiLoadTianxiaExample');
+    var button=el('aiLoadTianxiaExample'),job=null;
     try{
+      job=window.BooksourceRequests?.begin('import',function(){button.disabled=false;});
       button.disabled=true;
-      var response=await fetch('./samples/tianxia-legado.json',{cache:'no-store',credentials:'omit'});
+      var response=await fetch('./samples/tianxia-legado.json',{cache:'no-store',credentials:'omit',signal:job?.controller.signal});
       if(!response.ok)throw Error('测试书源示例下载失败');
       var source=await response.json();
+      if(job&&!window.BooksourceRequests.current(job))return;
+      window.BooksourceRequests?.finish(job);
       if(!Array.isArray(source)||source[0]?.bookSourceName!=='⚡📂笔趣阁')throw Error('测试源文件格式不正确');
       if(typeof window.navigateToPanel==='function')window.navigateToPanel('convert');
       el('input').value=JSON.stringify(source,null,2);
@@ -250,8 +258,8 @@
       el('aiReadSources')?.click();
       el('aiProbeKeyword').value='斗破苍穹';
       status('已加载本次笔趣阁书源并转换为 XSGG。现在可以点击「检测网站」，查看真实 HTTP 请求是否成功。');
-    }catch(error){status(error?.message||'加载测试书源失败',true);}
-    finally{button.disabled=false;}
+    }catch(error){if(!job||window.BooksourceRequests.current(job))status(error?.message||'加载测试书源失败',true);}
+    finally{if(!job||!job.controller.signal.aborted)button.disabled=false;window.BooksourceRequests?.finish(job);}
   }
   function downloadEvidence(){
     if(!lastEvidence)return;
@@ -262,6 +270,11 @@
   }
   function ready(){
     if(!el('aiSiteProbe'))return;
+    document.addEventListener('booksource:invalidated',function(){
+      clearTimeout(autofillTimer);
+      lastEvidence=null;
+      if(el('aiWebEvidence'))el('aiWebEvidence').hidden=true;
+    });
     el('aiSiteProbe').addEventListener('click',checkSite);
     el('webEvidenceDownload')?.addEventListener('click',downloadEvidence);
     var editor=el('input');

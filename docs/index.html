@@ -301,7 +301,7 @@ footer span { font-size: 10px; }
     <div class="ai-field"><label for="aiProbeKeyword">测试关键词</label><input id="aiProbeKeyword" type="text" maxlength="50" value="斗破苍穹" placeholder="输入要搜索的小说名称"><div class="ai-field-help">联网检测不需要 API Key。仅允许服务器审核过的公网书源域名，不会执行网页脚本、Cookie 或登录操作。</div></div>
     <button type="button" class="ai-action secondary" id="aiSiteProbe">检测网站（不调用 AI）</button>
   </div>
-  <div class="row"><button type="button" class="ai-action" id="aiAutoRepairRun">自动修复并复测（无需 API Key）</button><button type="button" class="ai-action secondary" id="aiRepairRun">使用我的 AI 进一步分析</button></div>
+  <div class="row"><button type="button" class="ai-action ghost" id="cancelCurrentRequest" disabled>取消当前检测</button><button type="button" class="ai-action" id="aiAutoRepairRun">自动修复并复测（无需 API Key）</button><button type="button" class="ai-action secondary" id="aiRepairRun">使用我的 AI 进一步分析</button></div>
   <div id="aiWebEvidence" class="ai-web-evidence" hidden>
     <h3>真实 HTTP / 网页解析检测</h3>
     <p id="aiWebEvidenceIntro">服务器读取网站搜索、详情、目录和正文的真实 HTTP 结果。</p>
@@ -470,6 +470,7 @@ footer span { font-size: 10px; }
   </div>
 </dialog>
 
+<script src="./request-state.js"></script>
 <script src="./converter.bundle.js"></script>
 <script>
 "use strict";
@@ -583,6 +584,8 @@ function loadSample() {
   setStatus($("status"), "已填入示例书源，点「开始转换」试试", "");
 }
 function clearAll() {
+  window.BooksourceRequests?.invalidate('cleared');
+  lastFullJson='';lastOutputName='booksource';lastConversionDiagnostics=null;
   $("input").value = ""; $("output").value = "";
   $("warnbox").style.display = "none";
   setStatus($("status"), "");
@@ -592,6 +595,7 @@ var lastFullJson = "";
 var PREVIEW_LIMIT = 400000;
 var WARN_CAP = 300;
 function doConvert() {
+  window.BooksourceRequests?.invalidate('convert-started');
   var st = $("status"), wb = $("warnbox");
   var text = $("input").value.trim();
   if (!text) { setStatus(st, "请先粘贴书源 JSON / 订阅链接，或选择文件", "err"); return; }
@@ -600,9 +604,14 @@ function doConvert() {
   }
   if (/^https?:\/\/\S+$/i.test(text) && text.length < 2048) {
     setStatus(st, "⏳ 正在解析订阅链接…", "");
+    var loadJob=window.BooksourceRequests?.begin('import');
     fetchSubscription(text).then(function (jsonText) {
+      if(loadJob&&!window.BooksourceRequests.current(loadJob))return;
+      window.BooksourceRequests?.finish(loadJob);
       runConvert(jsonText, st, wb);
     }, function (err) {
+      if(loadJob&&!window.BooksourceRequests.current(loadJob))return;
+      window.BooksourceRequests?.finish(loadJob);
       setStatus(st, "订阅链接解析失败：" + err, "err");
     });
     return;
@@ -724,6 +733,7 @@ $("onlyManualWarnings").addEventListener("change", function() {
 });
 
 function runConvert(jsonText, st, wb) {
+  window.BooksourceRequests?.invalidate('converted');
   var src;
   src = jsonText;
   var r;
@@ -813,7 +823,10 @@ $("legadoFile").addEventListener("change", function (ev) {
   if (!f) return;
   setStatus($("status"), "⏳ 正在读取 " + f.name + "…", "");
   var rd = new FileReader();
+  var importJob=window.BooksourceRequests?.begin("import",function(){if(rd.readyState===1)rd.abort();});
   rd.onload = function () {
+    if(importJob&&!window.BooksourceRequests.current(importJob))return;
+    window.BooksourceRequests?.finish(importJob);
     var buf = new Uint8Array(rd.result);
     var text = null;
     try { text = decodeMaybeXbs(buf); } catch (e) {}
@@ -825,7 +838,11 @@ $("legadoFile").addEventListener("change", function (ev) {
     setStatus($("status"), "已载入 " + f.name + "（" + text.length + " 字符），点「开始转换」", "");
     doConvert();
   };
-  rd.onerror = function(){ setStatus($("status"), "读取文件失败", "err"); };
+  rd.onerror = function(){
+    if(importJob&&!window.BooksourceRequests.current(importJob))return;
+    window.BooksourceRequests?.finish(importJob);
+    setStatus($("status"), "读取文件失败", "err");
+  };
   rd.readAsArrayBuffer(f);
   ev.target.value = "";
 });
@@ -833,7 +850,10 @@ $("xbsFile").addEventListener("change", function (ev) {
   var f = ev.target.files && ev.target.files[0];
   if (!f) return;
   var rd = new FileReader();
+  var importJob=window.BooksourceRequests?.begin("import",function(){if(rd.readyState===1)rd.abort();});
   rd.onload = function () {
+    if(importJob&&!window.BooksourceRequests.current(importJob))return;
+    window.BooksourceRequests?.finish(importJob);
     try {
       var bytes = new Uint8Array(rd.result);
       var json = xbs2json(bytes);
@@ -852,10 +872,16 @@ $("xbsFile").addEventListener("change", function (ev) {
       setStatus($("xbsStatus"), "解密失败：" + e.message, "err");
     }
   };
+  rd.onerror = function(){
+    if(importJob&&!window.BooksourceRequests.current(importJob))return;
+    window.BooksourceRequests?.finish(importJob);
+    setStatus($("xbsStatus"), "读取 XBS 文件失败", "err");
+  };
   rd.readAsArrayBuffer(f);
   ev.target.value = "";
 });
 function clearXbs() {
+  window.BooksourceRequests?.invalidate('xbs-cleared');
   setStatus($("xbsStatus"), "");
   $("xbsOutput").value = "";
   ["xbsCopyBtn", "xbsJsonBtn"].forEach(function(id) { $(id).disabled = true; });

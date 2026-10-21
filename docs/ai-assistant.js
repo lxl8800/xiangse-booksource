@@ -14,6 +14,7 @@
   var sourceDocument = null;
   var selectedSourceSnapshot = null;
   var repairResult = null;
+  var repairSnapshot = null;
   var $ = function (id) { return document.getElementById(id); };
 
   function showSettings(msg, kind) {
@@ -101,11 +102,11 @@
     showSettings('已清除此网站在当前浏览器保存的 AI 配置。', 'success');
     showRepair('当前浏览器未保存 AI 设置，需要重新填写。');
   }
-  async function postJson(url, payload) {
+  async function postJson(url, payload, signal) {
     var response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer',
+      credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer', signal: signal,
       body: JSON.stringify(payload)
     });
     var data;
@@ -158,6 +159,8 @@
     return { doc: doc, entries: entries };
   }
   function readSources() {
+    window.BooksourceRequests?.invalidate('sources-loaded');
+    var previous = $('aiRepairSource').value;
     try {
       var result = parseDocFromPage();
       sourceDocument = result.doc;
@@ -172,11 +175,12 @@
         option.textContent = pair[0];
         selector.appendChild(option);
       });
-      showRepair('已读取 ' + result.entries.length + ' 个书源。选择一个，然后填写要修复的问题。', 'success');
+      if (result.entries.some(function (pair) { return pair[0] === previous; })) selector.value = previous;
+      showRepair('已读取 ' + result.entries.length + ' 个书源。诊断会自动填写，无需手动输入问题。', 'success');
     } catch (error) { showRepair(error.message, 'error'); }
   }
   function currentPair() {
-    if (!sourceDocument) throw new Error('请先点击「读取当前书源」');
+    sourceDocument = parseDocFromPage().doc;
     var alias = $('aiRepairSource').value;
     if (sourceDocument.sourceUrl) return { alias: alias, value: sourceDocument };
     if (!Object.prototype.hasOwnProperty.call(sourceDocument, alias)) throw new Error('书源选择已失效，请重新读取');
@@ -219,12 +223,14 @@
     $('aiRepairResult').hidden = false;
   }
   async function runAutoRepair() {
-    var button=$('aiAutoRepairRun');
+    var button=$('aiAutoRepairRun'), job=null;
     try {
       if(window.BooksourceWebProbe?.prepareInput)window.BooksourceWebProbe.prepareInput();
       if(!sourceDocument)readSources();
       var selected=currentPair();
       selectedSourceSnapshot=JSON.stringify(selected.value);
+      job=window.BooksourceRequests?.begin('source',function(){button.disabled=false;});
+      repairSnapshot=null;
       repairResult=null;
       $('aiRepairResult').hidden=true;
       button.disabled=true;
@@ -234,7 +240,10 @@
       var data=await postJson('/api/source/auto-repair',{
         source:source,sourceName:selected.alias,
         legado:web.legado||null,keyword:web.keyword||'斗破苍穹'
-      });
+      },job?.controller.signal);
+      if(job&&!window.BooksourceRequests.current(job))return;
+      if(data.sourceName!==selected.alias)throw new Error('修复响应与当前书源不一致，已拒绝应用');
+      repairSnapshot=window.BooksourceRequests?.capture();
       repairResult=data;
       if(data.liveWebEvidence)window.BooksourceWebProbe?.show?.(data.liveWebEvidence);
       data.summary=data.candidate
@@ -245,11 +254,11 @@
       showRepair(data.candidate?
         '自动修复已生成；'+(data.verified?'复测四步成功。':'仍有复测限制。')+' 请在下方查看具体字段变化，确认后才应用到浏览器结果。':
         '没有生成可验证的修复候选：请查看网站 HTTP 状态和字段级检测报告。',data.candidate?'success':'');
-    }catch(error){showRepair(error.message||'自动修复失败','error');}
-    finally{button.disabled=false;}
+    }catch(error){if(!job||window.BooksourceRequests.current(job))showRepair(error.message||'自动修复失败','error');}
+    finally{if(!job||window.BooksourceRequests.owns(job))button.disabled=false;window.BooksourceRequests?.finish(job);}
   }
   async function runRepair() {
-    var btn = $('aiRepairRun');
+    var btn = $('aiRepairRun'), job=null;
     try {
       var settings = getStored();
       if (!settings || !settings.apiKey || !settings.baseUrl || !settings.model) throw new Error('请先点击右上角「AI 设置」并保存 API Key、接口和模型');
@@ -257,6 +266,8 @@
       if (!sourceDocument) readSources();
       var selected = currentPair();
       selectedSourceSnapshot = JSON.stringify(selected.value);
+      job=window.BooksourceRequests?.begin('source',function(){btn.disabled=false;});
+      repairSnapshot=null;
       repairResult = null;
       $('aiRepairResult').hidden = true;
       btn.disabled = true;
@@ -271,16 +282,20 @@
         legado: webParams.legado || null,
         keyword: webParams.keyword || '斗破苍穹',
         problem: $('aiRepairProblem').value.trim().slice(0, 1500)
-      });
+      },job?.controller.signal);
+      if(job&&!window.BooksourceRequests.current(job))return;
+      if(data.sourceName!==selected.alias)throw new Error('AI 响应与当前书源不一致，已拒绝应用');
+      repairSnapshot=window.BooksourceRequests?.capture();
       repairResult = data;
       window.BooksourceWebProbe?.show?.(data.liveWebEvidence);
       renderRepairResult(data);
       showRepair((data.accepted || []).length ? '收到 ' + data.accepted.length + ' 项修复候选。请结合真实网站检测报告查看差异后确认，未在 iOS 实测。' : '联网检测及 AI 分析结束。网站可能不可达或没有足够证据；请查看上方真实 HTTP 检测报告。', (data.accepted || []).length ? 'success' : '');
-    } catch (error) { showRepair(error.message || 'AI 修复失败', 'error'); }
-    finally { btn.disabled = false; }
+    } catch (error) { if(!job||window.BooksourceRequests.current(job))showRepair(error.message || 'AI 修复失败', 'error'); }
+    finally { if(!job||window.BooksourceRequests.owns(job))btn.disabled=false;window.BooksourceRequests?.finish(job); }
   }
   function candidatePackage() {
     if (!repairResult || !repairResult.candidate) throw new Error('当前没有可应用的修复候选');
+    if(repairSnapshot&&!window.BooksourceRequests.matches(repairSnapshot))throw new Error('书源内容或测试条件已变化，旧修复候选已失效，请重新检测');
     var current = currentPair();
     if (current.alias !== repairResult.sourceName || JSON.stringify(current.value) !== selectedSourceSnapshot) {
       throw new Error('当前书源在检测后发生变化，请重新读取并申请修复');
@@ -292,6 +307,8 @@
   function applyRepair() {
     try {
       var wrapped = candidatePackage();
+      window.BooksourceRequests?.cancel('source');
+      window.BooksourceRequests?.cancel('domain');
       var alias = Object.keys(wrapped)[0];
       var result = typeof structuredClone === 'function' ? structuredClone(sourceDocument) : JSON.parse(JSON.stringify(sourceDocument));
       if (typeof result.sourceUrl === 'string') result = wrapped[alias];
@@ -303,7 +320,8 @@
       ['copyBtn', 'dlJsonBtn', 'dlXbsBtn'].forEach(function (id) { $(id).disabled = false; });
       sourceDocument = result;
       selectedSourceSnapshot = JSON.stringify(wrapped[alias]);
-      showRepair('已应用到当前浏览器转换结果，可使用原有下载按钮导出；服务器没有保存或改动公共 14 源包。', 'success');
+      repairSnapshot=window.BooksourceRequests?.capture();
+      showRepair('已应用到当前浏览器转换结果，可使用原有下载按钮导出；服务器没有保存或改动公共 15 源包。', 'success');
     } catch (error) { showRepair(error.message, 'error'); }
   }
   function exportCandidate(asXbs) {
@@ -319,6 +337,13 @@
   }
   function initialize() {
     if (!$('aiSettingsOpen') || !$('aiSettingsDialog') || !$('aiRepairRun')) return;
+    document.addEventListener('booksource:invalidated',function(event){
+      var hadResult=!!repairResult;
+      repairResult=null;repairSnapshot=null;selectedSourceSnapshot=null;
+      $('aiRepairResult').hidden=true;
+      ['aiApplyFix','aiExportFixJson','aiExportFixXbs'].forEach(function(id){$(id).disabled=true;});
+      if(hadResult||event.detail.pending)showRepair('书源或测试条件已变化，旧检测与修复结果已作废。');
+    });
     fillFields(getStored());
     $('aiSettingsOpen').addEventListener('click', showDialog);
     $('aiSettingsClose').addEventListener('click', hideDialog);

@@ -6,7 +6,7 @@ const converter=fs.readFileSync('docs/converter.bundle.js','utf8');
 const domain=fs.readFileSync('docs/domain-check.js','utf8');
 const ai=fs.readFileSync('docs/ai-assistant.js','utf8');
 const live=fs.readFileSync('docs/ai-web-probe.js','utf8');
-const html=fs.readFileSync('docs/index.html','utf8')
+const html=fs.readFileSync('docs/index.html','utf8').replace('<script src="./request-state.js"></script>',()=>'<script>'+fs.readFileSync('docs/request-state.js','utf8')+'</script>')
  .replace('<script src="./converter.bundle.js"></script>',()=>'<script>'+converter+'</script>')
  .replace('<script src="./ai-assistant.js" defer></script>',()=>'<script>'+ai+'</script>')
  .replace('<script src="./ai-web-probe.js" defer></script>',()=>'<script>'+live+'</script>')

@@ -28,13 +28,13 @@ const THOUGHT_LEVELS = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhig
 const ALLOWED_PARAMS = new Set(['top_p', 'top_k', 'min_p', 'frequency_penalty', 'presence_penalty', 'seed', 'repetition_penalty']);
 const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
-export async function validatedConfig(config, { modelRequired = true } = {}) {
+export async function validatedConfig(config, { modelRequired = true, dnsChecker = checkPublicDns } = {}) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('请先填写 AI 设置');
   const api = String(config.apiType || 'openai-completions').trim();
   if (!API_IDS.has(api)) throw new Error('不支持的 API 类型');
   const { base, url } = parseAiBaseUrl(config.baseUrl, { allowHttp: process.env.ALLOW_HTTP_AI_ENDPOINTS === '1' });
   if (api === 'google-generative-ai') assertNativeGeminiDomain(url);
-  await checkPublicDns(url);
+  await dnsChecker(url);
   const apiKey = String(config.apiKey || '').trim();
   if (!apiKey || apiKey.length > 2048 || /[\r\n\x00-\x1f]/.test(apiKey)) throw new Error('请输入有效的 API Key');
   const model = String(config.model || '').trim();
@@ -185,8 +185,8 @@ const REPAIR_SYSTEM = [
   'patches 最多 6 条，path 从 searchBook/bookDetail/chapterList/chapterContent 开始；没有确切修复依据就返回空数组。'
 ].join('\n');
 
-export async function suggestAiRepair(rawConfig, input, { runner, webInspector = inspectSourceWeb } = {}) {
-  const config = await validatedConfig(rawConfig);
+export async function suggestAiRepair(rawConfig, input, { runner, webInspector = inspectSourceWeb, dnsChecker = checkPublicDns } = {}) {
+  const config = await validatedConfig(rawConfig, { dnsChecker });
   const { alias, source } = unwrapSource(input?.source, input?.sourceName);
   const problem = String(input?.problem || '请检查香色闺阁规则格式和容易导致搜索、详情、目录或正文失败的配置。').trim().slice(0, 1500);
   const serialized = JSON.stringify(source);

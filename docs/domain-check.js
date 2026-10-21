@@ -62,6 +62,7 @@
   }
   function schedule(output,input){
     var id=++currentRun;
+    window.BooksourceRequests?.cancel('domain');
     render([]);
     if(!$('autoDomainProbe')?.checked){setMessage('域名自动检查已关闭。');return;}
     if(!output||typeof output!=='object')return;
@@ -85,15 +86,16 @@
     if(!entries.length){render([]);return;}
     setMessage('正在自动检测 '+entries.length+' 个书源的域名是否迁移；格式结果已生成，不需 AI…');
     var initial=window.lastFullJson || JSON.stringify(output,null,2);
+    var job=window.BooksourceRequests?.begin('domain',function(){setMessage('域名检查已取消；未完成的变更不会自动应用。');});
     fetch('/api/source/domains',{
       method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({sources:entries}),credentials:'omit',referrerPolicy:'no-referrer',
-      cache:'no-store'
+      cache:'no-store',signal:job?.controller.signal
     }).then(function(response){return response.json().then(json=>{
       if(!response.ok||!json.ok)throw Error(json.error||'检测接口不可用');
       return json;
     });}).then(function(data){
-      if(id!==currentRun)return;
+      if(id!==currentRun||(job&&!window.BooksourceRequests.current(job)))return;
       // Do not stomp on AI edits or a newer converter run.
       if((window.lastFullJson||'')!==initial)return;
       var result=JSON.parse(initial),log=[],applied=0,pending=0;
@@ -128,9 +130,10 @@
       render(log,data.results);
       setMessage('域名自动检查完成：更新 '+applied+' 条，待进一步确认 '+pending+' 条。未验证的站点保持原始地址。');
     }).catch(function(error){
-      if(id!==currentRun)return;
+      if(id!==currentRun||(job&&!window.BooksourceRequests.current(job)))return;
       setMessage('域名检测未完成：'+String(error.message||error).slice(0,180)+'。离线转换结果不受影响。');
-    });
+    }).finally(function(){window.BooksourceRequests?.finish(job);});
   }
-  window.BooksourceDomainCheck={schedule:schedule,cancel:function(){currentRun++;}};
+  document.addEventListener('booksource:invalidated',function(){currentRun++;render([]);});
+  window.BooksourceDomainCheck={schedule:schedule,cancel:function(){currentRun++;window.BooksourceRequests?.cancel('domain');}};
 })();
