@@ -130,7 +130,7 @@ test('per-page DNS failure is bounded and remains incomplete',async()=>{
 });
 
 test('unexecuted title postprocessing does not block URL pagination evidence or claim full field verification',async()=>{
- const s=source();s.chapterList.title+='||@js:return result.trim();';
+ const s=source();s.chapterList.title+='||@js:return java.getString(result);';
  const {report,calls}=await inspect(s);
  assert(calls.some(c=>new URL(c.url).pathname==='/toc/2'));
  assert.equal(report.steps[3].pagination.complete,true);assert.equal(report.steps[3].pagination.fullyChecked,false);

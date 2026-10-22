@@ -8,11 +8,12 @@ export function acceptsResponse(response,action){
 export function parseResponseDocument(response,action){
   const format=action?.responseFormatType||'html';
   if(!acceptsResponse(response,action))throw Error('响应不能按配置的 '+format+' 解析');
-  if(format==='html')return new JSDOM(response.body,{url:response.url}).window.document;
+  const ruleConfig={host:action?.host||new URL(response.url).origin};
+  if(format==='html'){const doc=new JSDOM(response.body,{url:response.url}).window.document;doc.ruleConfig=ruleConfig;return doc;}
   let data;
   try{data=JSON.parse(response.body);}
   catch{throw Error('JSON 响应语法错误或实际为 HTML/验证码页面');}
-  return {isJsonDocument:true,jsonData:data,URL:response.url,title:'',querySelector:()=>null,querySelectorAll:()=>[]};
+  return {ruleConfig,isJsonDocument:true,jsonData:data,URL:response.url,title:'',querySelector:()=>null,querySelectorAll:()=>[]};
 }
 function wrap(value){
   const scalar=value===null?'':typeof value==='object'?'':String(value);

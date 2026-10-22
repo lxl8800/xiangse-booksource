@@ -154,7 +154,9 @@
         var request=step.requestCapabilities;
         evidenceLines.push('已应用配置请求头：'+((request.headersApplied||[]).join('、')||'无')+'（仅记录名称）');
         if(request.headersSkipped?.length)evidenceLines.push('未发送请求头：'+request.headersSkipped.join('、'));
-        evidenceLines.push('GET 关键词编码：'+request.requestEncoding+'；响应配置编码：'+request.responseEncoding);
+        evidenceLines.push((request.method||step.requestMethod||'GET')+' 参数编码：'+request.requestEncoding+'；响应配置编码：'+request.responseEncoding);
+        if(request.expressionMode)evidenceLines.push('请求来源：受限数据表达式解释（非任意 JavaScript 执行）。');
+        if(request.formFields?.length)evidenceLines.push('只读搜索表单字段：'+request.formFields.join('、')+'（不展示参数值，不转发认证信息）。');
         (request.unchecked||[]).forEach(function(x){evidenceLines.push('未执行 '+x.field+'：'+x.reason);});
       }
       if(step.bodyTruncated||step.extractionTruncated)evidenceLines.push('内容受到检测预算限制，不能据此认定完整验证。');
@@ -164,7 +166,7 @@
       if(step.autoDiscovered)evidenceLines.push('自动发现可匹配选择器：'+JSON.stringify(step.autoDiscovered));
       (step.fieldChecks||[]).forEach(function(x){
         evidenceLines.push('字段 '+x.field+(x.parser?'（'+x.parser+'）':'')+'：'+x.status+'，匹配 '+(x.matches??'?')+' 条；'+(x.note||'')+'；规则 '+x.rule);
-        if(x.normalization==='response-url')evidenceLines.push('  相对地址按该页最终响应 URL 解析（已识别转换器规则）。');
+        if(['response-url','legacy-response-url'].includes(x.normalization))evidenceLines.push('  相对地址按该页最终响应 URL 解析（已识别转换器规则）。');
         (x.contexts||[]).forEach(function(row){
           evidenceLines.push('  '+(x.context==='list-node'?'列表条目 '+(row.index+1):'页面')+'：匹配 '+row.matches+'；样例 '+JSON.stringify(row.samples||[])+(row.resolvedUrls?.length?'；解析地址 '+JSON.stringify(row.resolvedUrls):''));
         });

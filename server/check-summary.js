@@ -19,7 +19,7 @@ const suggestions={
  http_error:'服务器有响应但接口返回错误状态；404 应核查路径，5xx 可能是源站故障，不能仅凭状态码自动改写规则。',
  unreachable:'保留原规则，检查 DNS、证书、站点状态或稍后重试；网络失败不能靠猜 XPath 修复。',
  restricted:'站点拒绝访问或存在验证/认证限制；不绕过限制，不自动替换源。',
- unsupported:'存在动态 JS、WebView、POST、跨站或安全限制；保留规则和诊断，使用允许的环境或目标 App 验证。',
+ unsupported:'存在未支持的脚本/表单、WebView、跨站或安全限制；保留规则和诊断，使用允许的环境或目标 App 验证。',
  error:'检测未生成可信证据，保留原书源；查看错误并在问题解决后重试。'
 };
 export function summarizeEvidence(evidence){

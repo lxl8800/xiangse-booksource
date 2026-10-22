@@ -7,6 +7,7 @@
 var utils = require("./utils");
 var modules = require("./modules");
 var formatCompat = require("./formatCompat");
+var staticScript = require("./staticScript");
 var domainRewrite = require("./domainRewrite");
 
 function normalizeSource(source) {
@@ -297,4 +298,4 @@ function convertAll(source, options) {
   return { output: out, warnings: warnings, failures: failures, count: arr.length, okCount: okCount, sourceResults:sourceResults };
 }
 
-module.exports = { evaluateJsonPath: require('./jsonPath').evaluateJsonPath, convert: convert, convertAll: convertAll, applyVerifiedDomainMove: domainRewrite.applyVerifiedDomainMove, describeStaticGetRequest: require("./urlRule").describeStaticGetRequest };
+module.exports = { evaluateStaticScript: staticScript.evaluateStaticScript, evaluateStaticRequest: staticScript.evaluateStaticRequest, evaluateJsonPath: require('./jsonPath').evaluateJsonPath, convert: convert, convertAll: convertAll, applyVerifiedDomainMove: domainRewrite.applyVerifiedDomainMove, describeStaticGetRequest: require("./urlRule").describeStaticGetRequest };

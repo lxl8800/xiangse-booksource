@@ -1,5 +1,6 @@
 "use strict";
 var utils=require("./utils");
+var legacy=require("./legacyLink");
 /* Portable URL normalization for known URL fields. No browser globals or eval. */
 function resolveHref(value, base) {
   var u=String(value==null?"":value).trim();
@@ -37,9 +38,13 @@ function compileLinkRule(rule){
 function describeLinkRule(rule){
   if(typeof rule!=="string"||rule.length>14000)return null;
   var marker="||@js:\n",index=rule.indexOf(marker);
-  if(index<=0||rule.slice(index+marker.length)!==RESOLVER_SCRIPT)return null;
-  var selector=rule.slice(0,index);
+  if(index<=0)return null;
+  var selector=rule.slice(0,index),script=rule.slice(index+marker.length);
   if(!/^(\/|\.\/|\(|\$)/.test(selector.trim()))return null;
-  return {selector:selector,normalization:"response-url"};
+  if(script===RESOLVER_SCRIPT)return {selector:selector,normalization:"response-url"};
+  var known=legacy.recognizeLegacyResolver(script);
+  if(known)return {selector:selector,normalization:"legacy-response-url",fallbackHost:known.fallbackHost};
+  return null;
 }
-module.exports={resolveHref:resolveHref,compileLinkRule:compileLinkRule,describeLinkRule:describeLinkRule};
+function resolveRecognizedLink(value,base,descriptor){return descriptor&&descriptor.normalization==="legacy-response-url"?legacy.resolveLegacyHref(value,base,descriptor.fallbackHost):resolveHref(value,base);}
+module.exports={resolveRecognizedLink:resolveRecognizedLink,resolveHref:resolveHref,compileLinkRule:compileLinkRule,describeLinkRule:describeLinkRule};

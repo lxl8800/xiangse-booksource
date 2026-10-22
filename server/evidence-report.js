@@ -1,11 +1,12 @@
 import {createRequire} from 'node:module';
 const {describeStaticGetRequest}=createRequire(import.meta.url)('../converter/lib/urlRule.js');
+const {evaluateStaticRequest}=createRequire(import.meta.url)('../converter/lib/staticScript.js');
 /** Bounded, read-only evidence formatting. Does not execute any rule. */
-const SENSITIVE=/token|api[_-]?key|secret|password|cookie|authorization|signature|session|credential/i;
+const SENSITIVE=/token|api[_-]?key|secret|password|cookie|authorization|signature|session|credential|^(?:_t|csrf|csrf[_-]?token|sign|nonce)$/i;
 export function redactText(value) {
   return String(value??'')
     .replace(/(https?:\/\/)[^/\s"'<>]*@/gi,'$1[redacted]@')
-    .replace(/((?:[?&]|&amp;)(?:[^=&#\s"'<>]*)(?:token|api[_-]?key|secret|password|cookie|auth|signature|session)[^=&#\s"'<>]*=)[^&#\s"'<>]*/gi,'$1[redacted]');
+    .replace(/((?:[?&]|&amp;)(?:[^=&#\s"'<>]*)(?:token|api[_-]?key|secret|password|cookie|auth|signature|session|_t|csrf|nonce)[^=&#\s"'<>]*=)[^&#\s"'<>]*/gi,'$1[redacted]');
 }
 export function redactUrl(value,base) {
   try {
@@ -44,8 +45,11 @@ export function sanitizeEvidence(report,source) {
     if(++visited>2000)return;
     if(typeof value==='string'){
       if(key==='requestInfo'){
-        const request=describeStaticGetRequest(value);
+        const simple=describeStaticGetRequest(value);
+        const decoded=simple?null:evaluateStaticRequest(value,{params:{keyWord:'',pageIndex:1,queryInfo:{}},config:{host:'https://redaction.invalid',httpHeaders:{}},result:'https://redaction.invalid/'});
+        const request=simple||(decoded?.ok?decoded.request:null);
         if(request?.httpHeaders)inspect(request.httpHeaders,'httpHeaders');
+        if(request?.httpParams)inspect(request.httpParams,'httpParams');
       }
       if(SENSITIVE.test(key)){
         remember(value);

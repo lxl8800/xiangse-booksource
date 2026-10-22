@@ -39,7 +39,7 @@ async function run(){
   assert(details.textContent.includes('字符编码：utf-8'));
   assert(details.textContent.includes('已应用配置请求头：User-Agent'));
   assert(details.textContent.includes('未发送请求头：Authorization'));
-  assert(details.textContent.includes('GET 关键词编码：gbk'));
+  assert(details.textContent.includes('GET 参数编码：gbk'));
   assert(details.textContent.includes('分页：请求 2 页；未完成'));
   assert(details.textContent.includes('合并目录：3 条；重复地址 1 条'));
   assert(details.textContent.includes('第 2 页：HTTP 404'));
@@ -56,6 +56,15 @@ async function run(){
   const exported=await blobs[0].text();
   assert.deepEqual(JSON.parse(exported),evidence);
   assert(!exported.includes('LOCAL_PRIVATE_API_KEY'));
+  const post=JSON.parse(JSON.stringify(evidence));
+  post.steps[0].requestMethod='POST';
+  Object.assign(post.steps[0].requestCapabilities,{method:'POST',expressionMode:true,formFields:['searchkey','Submit']});
+  w.BooksourceWebProbe.show(post);
+  const postDetails=d.querySelector('#aiWebEvidenceSteps details');
+  assert(postDetails.textContent.includes('POST 参数编码：gbk'));
+  assert(postDetails.textContent.includes('受限数据表达式解释'));
+  assert(postDetails.textContent.includes('只读搜索表单字段：searchkey、Submit'));
+  assert(!postDetails.textContent.includes('LOCAL_PRIVATE_API_KEY'));
   d.getElementById('aiReadSources').click();
   d.getElementById('webEvidenceDownload').click();
   assert.equal(downloads.length,1,'reset does not export stale reports');

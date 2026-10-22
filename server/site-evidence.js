@@ -9,10 +9,11 @@
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 const { splitUrlOptions } = createRequire(import.meta.url)('../converter/lib/urlRule.js');
-import {buildGetPlan} from './request-plan.js';
+import {buildGetPlan,isReadOnlySearchTarget} from './request-plan.js';
 import {inspectPagination} from './pagination.js';
 import {acceptsResponse,parseResponseDocument,evaluateJsonField} from './response-parser.js';
-const {resolveHref,describeLinkRule}=createRequire(import.meta.url)('../converter/lib/linkRule.js');
+const {resolveHref,resolveRecognizedLink,describeLinkRule}=createRequire(import.meta.url)('../converter/lib/linkRule.js');
+const {evaluateStaticScript,canInterpretStaticScript}=createRequire(import.meta.url)('../converter/lib/staticScript.js');
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
@@ -33,7 +34,7 @@ function safeTarget(href, origin) {
   try { url = new URL(String(href || '').trim(), origin); }
   catch { throw new Error('书源请求地址格式错误'); }
   if (url.username || url.password || url.hash || !['http:', 'https:'].includes(url.protocol)) throw new Error('书源请求地址包含不允许的协议或用户信息');
-  if([...url.searchParams.keys()].some(k=>/token|api[_-]?key|secret|password|cookie|authorization|signature|session|credential|^(?:auth|auth[_-]?code|access[_-]?key|bearer)$/i.test(k)))throw new Error('书源请求地址含认证参数，未发送凭据');
+  if([...url.searchParams.keys()].some(k=>/token|api[_-]?key|secret|password|cookie|authorization|signature|session|credential|^(?:auth|auth[_-]?code|access[_-]?key|bearer|_t|csrf|csrf[_-]?token|sign|nonce)$/i.test(k)))throw new Error('书源请求地址含认证参数，未发送凭据');
   if (!permittedHosts.has(url.hostname.toLowerCase())) throw new Error('书源域名不在服务器验证白名单，请由维护者审核后添加');
   // A documented apex ↔ www canonical redirect is allowed, but no other
   // cross-site transition. Both hostnames must be on the local allowlist.
@@ -70,7 +71,7 @@ function selectedXsgg(payload, selectedName) {
 }
 
 function searchRequest(legado, source, keyword) {
-  if(source)return buildGetPlan({source,action:source.searchBook||{},origin:new URL(source.sourceUrl).origin,keyword});
+  if(source)return buildGetPlan({source,action:source.searchBook||{},origin:new URL(source.sourceUrl).origin,keyword,role:'searchBook'});
   const raw=legado?.searchUrl;
   if(typeof raw!=='string'||!raw.trim())return {reason:'缺少可静态识别的搜索地址'};
   const split=splitUrlOptions(raw),options=split.options||{};
@@ -85,7 +86,7 @@ function searchRequest(legado, source, keyword) {
     origin:new URL(legado.bookSourceUrl).origin,keyword});
 }
 function actionRequest(action,seed,origin,keyword,source){
-  return buildGetPlan({source,action:action||{},seed,origin,keyword});
+  return buildGetPlan({source,action:action||{},seed,origin,keyword,role:null});
 }
 function equivalentResponseConfig(before,after){
   const headers=plan=>Object.entries(plan?.headers||{}).sort(([a],[b])=>a.localeCompare(b));
@@ -101,12 +102,34 @@ function withinBudget(promise,signal){
 }
 
 function evaluateField(doc,context,rule,count=3,listMode=false){
-  const known=describeLinkRule(rule);
-  const parsed=splitXPathPipeline(rule);
+  const raw=String(rule||'').trim();
+  const config=doc.ruleConfig||{host:new URL(doc.URL).origin};
+  const bindings=result=>({result,config,params:{responseUrl:doc.URL}});
+  const wrapped=value=>({nodeValue:value==null?'':String(value),textContent:value==null?'':String(value),...(doc.isJsonDocument?{jsonValue:value}:{})});
+  if(raw.startsWith('@js:')){
+    if(!doc.isJsonDocument||listMode)return {nodes:[],values:[],total:0,reason:'只有 JSON 条目的标量字段可使用受限数据表达式'};
+    const result=evaluateStaticScript(raw,bindings(context===doc?doc.jsonData:context?.jsonValue));
+    if(!result.ok||result.value!==null&&!['string','number','boolean'].includes(typeof result.value))return {nodes:[],values:[],total:0,reason:result.reason||'字段表达式必须返回标量'};
+    const node=wrapped(result.value);
+    return {nodes:[node],values:[node.nodeValue],total:1,postprocessUnchecked:false,normalization:'bounded-data-expression'};
+  }
+  const known=describeLinkRule(rule),parsed=splitXPathPipeline(rule);
   const selected=evaluateXpath(doc,context,known?.selector||parsed.xpath,count,listMode);
   const values=selected.nodes.map(nodeText);
-  return {...selected,values:known?values.map(value=>resolveHref(value,doc.URL)):values,
-    postprocessUnchecked:parsed.postprocess&&!known,normalization:known?.normalization};
+  if(known)return {...selected,values:values.map(value=>resolveRecognizedLink(value,doc.URL,known)),postprocessUnchecked:false,normalization:known.normalization};
+  if(parsed.postprocess){
+    const script=raw.slice(parsed.xpath.length).replace(/^\s*\|\|\s*/,'');
+    const supported=script.startsWith('@js:')?canInterpretStaticScript(script):{ok:false,reason:'后处理不是受支持的 @js 数据表达式'};
+    if(!supported.ok)return {...selected,values,postprocessUnchecked:true,postprocessReason:supported.reason};
+    if(selected.reason)return {...selected,values,postprocessUnchecked:true};
+    if((selected.total??selected.nodes.length)>1)return {...selected,values,postprocessUnchecked:true,postprocessReason:'后处理输入有多个匹配，不能猜测拼接或逐项执行的 App 语义'};
+    if(!selected.nodes.length)return {...selected,values,postprocessUnchecked:false};
+    const result=evaluateStaticScript(script,bindings(doc.isJsonDocument?selected.nodes[0].jsonValue:values[0]));
+    if(!result.ok||result.value!==null&&!['string','number','boolean'].includes(typeof result.value))return {...selected,values,postprocessUnchecked:true,postprocessReason:result.reason||'后处理未返回标量'};
+    const node=wrapped(result.value);
+    return {nodes:[node],values:[node.nodeValue],total:1,postprocessUnchecked:false,normalization:'bounded-data-expression'};
+  }
+  return {...selected,values,postprocessUnchecked:false};
 }
 function singleUrlField(doc,context,rule){
   const field=evaluateField(doc,context,rule,2);
@@ -242,6 +265,9 @@ function actualSourceFieldChecks(source, doc, module, sampleNodes=[]){
         row.resolvedUrls=evaluated.values.map(value=>redactUrl(value,doc.URL)).slice(0,3);
       if(doc.isJsonDocument&&['detailUrl','url','cover','chapterListUrl'].includes(field)&&evaluated.nodes.some(n=>typeof n.jsonValue!=='string'))row.error='JSON URL 字段必须是字符串，不能猜测 ID 拼接';
       if(evaluated.reason)row.error=evaluated.reason;
+      row.postprocessUnchecked=!!evaluated.postprocessUnchecked;
+      if(evaluated.postprocessReason)row.postprocessReason=evaluated.postprocessReason;
+      if(evaluated.normalization)row.normalization=evaluated.normalization;
       return row;
     });
     entry.matches=checks[0].matches;
@@ -254,7 +280,7 @@ function actualSourceFieldChecks(source, doc, module, sampleNodes=[]){
     else if(field!=='list'&&checks.every(x=>!x.samples.some(Boolean))){entry.status='no-results';entry.note='匹配节点但提取值为空';}
     else if(checks.some(x=>x.matches===0||field!=='list'&&!x.samples.some(Boolean))){entry.status='partial-match';entry.note='部分列表条目未匹配字段或提取值为空，需核对规则与空值';}
     else if(['detailUrl','url','chapterListUrl'].includes(field)&&checks.some(x=>x.matches>1)){entry.status='multiple-values';entry.note='URL 为单值字段，多个匹配不能证明地址传递正确';}
-    else if(postprocess&&!known){entry.status='partially-checked';entry.note='仅验证静态选择器，JS 后处理或后续规则未执行';}
+    else if(checks.some(x=>x.postprocessUnchecked)){entry.status='partially-checked';entry.note=checks.find(x=>x.postprocessReason)?.postprocessReason||'部分后处理超出受限表达式范围，未执行';}
     else entry.status='ok';
     rows.push(entry);
   }
@@ -379,7 +405,8 @@ function fieldValue(doc,node,rule) {
 }
 
 async function downloadSite(url, origin, { fetcher, dnsChecker=checkPublicDns, timeoutMs=7800, maxBytes=MAX_HTML_BYTES, plan }={}) {
-  if(plan?.reason)return {url,requestMethod:"GET",status:"unsupported",reason:plan.reason};
+  if(plan?.reason)return {url,requestMethod:plan.method||'GET',status:'unsupported',reason:plan.reason};
+  let method=plan?.method||'GET',requestBody=plan?.body;
   let safe=safeTarget(url,origin);
   const ctl=new AbortController();
   const started=Date.now();
@@ -393,8 +420,8 @@ async function downloadSite(url, origin, { fetcher, dnsChecker=checkPublicDns, t
       const hopStarted=Date.now();
       await withinBudget(dnsChecker(safe),ctl.signal);
       response=await withinBudget((fetcher || makeSafeFetch(safe.origin,{allowHttp:true,allowRedirectResponse:true}))(safe.href,{
-        method:'GET',signal:ctl.signal,redirect:'manual',
-        headers:{'User-Agent':USER_AGENT,Accept:'text/html,application/xhtml+xml,application/json;q=0.8,*/*;q=0.4',...plan?.headers}
+        method,body:method==='POST'?requestBody:undefined,signal:ctl.signal,redirect:'manual',
+        headers:{'User-Agent':USER_AGENT,Accept:'text/html,application/xhtml+xml,application/json;q=0.8,*/*;q=0.4',...plan?.headers,...(method==='POST'?{'Content-Type':'application/x-www-form-urlencoded'}:{})}
       }),ctl.signal);
       responseElapsedMs=Date.now()-hopStarted;
       if(response.status>=300 && response.status<400){
@@ -403,22 +430,24 @@ async function downloadSite(url, origin, { fetcher, dnsChecker=checkPublicDns, t
         try{
           if(!location)throw new Error('重定向缺少 Location');
           next=safeTarget(new URL(location,safe.href).href,origin);
+          if(method==='POST'&&[307,308].includes(response.status)&&(next.origin!==safe.origin||!isReadOnlySearchTarget(next)))throw Error('POST 重定向未保持同源只读搜索入口，不转发表单');
           if(plan?.rejectVisitedUrls?.has(next.href)){redirectLoop=true;throw Error('分页重定向到已经验证的页面');}
         }catch(error){reason='不安全重定向：'+tiny(error.message);}
         let target;
         try{target=location?new URL(location,safe.href):null;}catch{}
         redirects.push({from:safe.origin,to:target?.origin||null,url:redactUrl(safe.href),
-          location:target?redactUrl(target.href):null,status:response.status,elapsedMs:responseElapsedMs,
+          location:target?redactUrl(target.href):null,status:response.status,requestMethod:method,elapsedMs:responseElapsedMs,
           ...(reason?{reason}:{})});
         await withinBudget(response.body?.cancel(),ctl.signal);
-        if(reason||i>=2)return {url:safe.href,originalUrl:initialUrl,requestMethod:'GET',redirects,
+        if(reason||i>=2)return {url:safe.href,originalUrl:initialUrl,requestMethod:method,redirects,
           elapsedMs:Date.now()-started,status:redirectLoop?'loop':'redirect',httpStatus:response.status,
           reason:reason||'重定向次数超出限制'};
+        if(method==='POST'&&[301,302,303].includes(response.status)){method='GET';requestBody=undefined;}
         safe=next;continue;
       }
       break;
     }
-    const result=responseInfo={responseElapsedMs,url:safe.href,originalUrl:initialUrl,requestMethod:'GET',redirects,elapsedMs:Date.now()-started,httpStatus:response.status,kind:decodeKind(response),contentType:tiny(response.headers?.get?.('content-type'),160),requestCapabilities:plan?.requestCapabilities};
+    const result=responseInfo={responseElapsedMs,url:safe.href,originalUrl:initialUrl,requestMethod:method,redirects,elapsedMs:Date.now()-started,httpStatus:response.status,kind:decodeKind(response),contentType:tiny(response.headers?.get?.('content-type'),160),requestCapabilities:plan?.requestCapabilities};
     if(response.status<200||response.status>=300){await withinBudget(response.body?.cancel(),ctl.signal);return {...result,status:response.status===403?'blocked':'http-error',reason:'网站响应 HTTP '+response.status};}
     const reportedSize=Number(response.headers?.get?.('content-length') || 0);
     if(reportedSize>maxBytes){await withinBudget(response.body?.cancel(),ctl.signal);return {...result,status:'unsupported',reason:'响应内容超出安全检测的 HTML 大小限制'};}
@@ -441,7 +470,7 @@ async function downloadSite(url, origin, { fetcher, dnsChecker=checkPublicDns, t
       bytes:size,bodyTruncated:body.length>MAX_DOCUMENT_LENGTH,body:body.slice(0,MAX_DOCUMENT_LENGTH)};
   }catch(error){
     const msg=String(error?.message||'');
-    return {...responseInfo,url:safe.href,originalUrl:initialUrl,requestMethod:'GET',redirects,elapsedMs:Date.now()-started,status:ctl.signal.aborted||/timeout|timed out|UND_ERR_CONNECT_TIMEOUT/i.test(msg)?'timeout':'network-error',reason:ctl.signal.aborted?'连接超过 '+timeoutMs+'ms':tiny(msg,180)};
+    return {...responseInfo,url:safe.href,originalUrl:initialUrl,requestMethod:method,redirects,elapsedMs:Date.now()-started,status:ctl.signal.aborted||/timeout|timed out|UND_ERR_CONNECT_TIMEOUT/i.test(msg)?'timeout':'network-error',reason:ctl.signal.aborted?'连接超过 '+timeoutMs+'ms':tiny(msg,180)};
   }finally{clearTimeout(timer);}
 }
 
@@ -701,7 +730,7 @@ async function inspectSourceWebRaw(input,{fetcher,dnsChecker=checkPublicDns,time
     chapterStep.parserFormat=chapterDoc.isJsonDocument?'json':'html';
     let section=!source && legado?.ruleContent?.content
       ?{nodes:legadoSelect(chapterDoc,legado.ruleContent.content,2)}
-      :evaluateXpath(chapterDoc,chapterDoc,source?.chapterContent?.content,2000);
+      :evaluateField(chapterDoc,chapterDoc,source?.chapterContent?.content,2000);
     chapterStep.configuredMatches=section.total??section.nodes?.length??0;
     if(!chapterStep.configuredMatches){
       const inferred=inferChapterContent(chapterDoc);
@@ -712,7 +741,7 @@ async function inspectSourceWebRaw(input,{fetcher,dnsChecker=checkPublicDns,time
       }
     }
     if(source?.chapterContent)chapterStep.fieldChecks=actualSourceFieldChecks(source,chapterDoc,'chapterContent');
-    const content=(section.nodes||[]).map(nodeText).join('\n');
+    const content=(section.values||(section.nodes||[]).map(nodeText)).join('\n');
     const text=tiny(content,800);
     chapterStep.contentLength=content.trim().length;
     chapterStep.extractionTruncated=(section.total??0)>(section.nodes?.length||0);

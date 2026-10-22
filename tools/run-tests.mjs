@@ -16,7 +16,7 @@ const guard=path.join(root,'tools/offline-test-guard.mjs');
 const suites=[];
 if(mode==='all'||mode==='server')suites.push(['server',['--test',...fs.readdirSync(path.join(root,'server/tests')).filter(f=>f.endsWith('.test.js')).sort().map(f=>'server/tests/'+f)]]);
 if(mode==='all'||mode==='converter')for(const f of ['run.js','units.js'])suites.push(['converter/'+f,['converter/test/'+f]]);
-if(mode==='all'||mode==='browser')for(const f of ['test-xiangse-format.js','test-sidebar-ui.js','test-ai-browser.js','test-domain-browser.js','test-evidence-browser.cjs','test-request-state.cjs','test-batch-browser.cjs']){
+if(mode==='all'||mode==='browser')for(const f of ['test-xiangse-format.js','test-sidebar-ui.js','test-ai-browser.js','test-domain-browser.js','test-evidence-browser.cjs','test-request-state.cjs','test-batch-browser.cjs','test-static-browser.cjs']){
  if(fs.existsSync(path.join(root,'tests',f)))suites.push(['browser/'+f,['tests/'+f]]);
 }
 let failed=0;
