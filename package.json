@@ -2,14 +2,15 @@
   "name": "xiangse-booksource",
   "private": true,
   "type": "module",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "scripts": {
     "start": "node server/index.js",
     "test": "node tools/run-tests.mjs server",
     "test:all": "node tools/run-tests.mjs all",
     "test:browser": "node tools/run-tests.mjs browser",
     "test:converter": "node tools/run-tests.mjs converter",
-    "test:live": "node tools/check-two-live.mjs"
+    "test:live": "node tools/check-two-live.mjs",
+    "test:bundle-live": "node tools/check-bundle-live.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.1.0",

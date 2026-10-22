@@ -1,0 +1,32 @@
+name: Offline regression and Docker build
+on:
+  push:
+    branches: [main, 'work/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: offline-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout (pinned v7)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build complete test image
+        run: |
+          VERSION=$(python3 -c 'import json;print(json.load(open("package.json"))["version"])')
+          docker build --target test --build-arg BUILD_REVISION="$GITHUB_SHA" --build-arg APP_VERSION="$VERSION" -t xiangse-booksource:test .
+      - name: Run all regression tests without network access
+        run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:size=64m,noexec,nosuid xiangse-booksource:test
+      - name: Verify production build and provenance
+        run: |
+          VERSION=$(python3 -c 'import json;print(json.load(open("package.json"))["version"])')
+          docker build --target production --build-arg BUILD_REVISION="$GITHUB_SHA" --build-arg APP_VERSION="$VERSION" -t xiangse-booksource:production .
+          docker run --rm --network none --read-only --cap-drop ALL --entrypoint node xiangse-booksource:production -e 'const fs=require("fs"),assert=require("node:assert/strict");const p=require("./package.json"),b=require("./build-info.json");assert.equal(p.version,b.version);assert.match(b.sourceSha256,/^[a-f0-9]{64}$/);assert(!fs.existsSync("./server/tests"));console.log("Production build verified",p.version,b.revision);'

@@ -6,6 +6,8 @@ import { API_TYPES, listApiModels, suggestAiRepair, testAiConnection } from './a
 import { inspectSourceWeb } from './site-evidence.js';
 import { runAutoRepair } from './auto-repair.js';
 import { inspectDomainBatch } from './domain-migration.js';
+import { createSourceCatalog } from './source-catalog.js';
+import { summarizeEvidence } from './check-summary.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const docs = path.resolve(root, '../docs');
@@ -28,6 +30,7 @@ function publicErrorMessage(error) {
 
 export function createApp({ listModels = listApiModels, testConnection = testAiConnection, suggestRepair = suggestAiRepair, checkWebsite = inspectSourceWeb, autoRepair = runAutoRepair, inspectDomains = inspectDomainBatch } = {}) {
   const app = express();
+  const catalog=createSourceCatalog({inspector:checkWebsite});
   app.disable('x-powered-by');
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -38,25 +41,31 @@ export function createApp({ listModels = listApiModels, testConnection = testAiC
     next();
   });
   app.get('/api/health', (_, res) => res.json({ ok: true, service: 'booksource-workbench', api: true, version, build }));
+  app.get('/api/source/catalog', (_, res) => res.json({ok:true,...catalog.metadata()}));
   app.get('/api/ai/types', (_, res) => res.json({ types: API_TYPES, localOnly: true, persistedOnServer: false }));
   app.use('/api', express.json({ limit: '150kb', strict: true }));
-  const withLimit = (handler) => async (req, res) => {
-    const key = String(req.ip || req.socket.remoteAddress || 'unknown');
+  const withLimit = (handler, {maxRequests=20,group='default'}={}) => async (req, res) => {
+    const key = group+':'+String(req.ip || req.socket.remoteAddress || 'unknown');
     const now = Date.now();
     if (requests.size > 3000) for (const [k, v] of requests) if (now - v.started > 600_000) requests.delete(k);
     const bucket = requests.get(key) || { started: now, count: 0 };
     if (now - bucket.started > 600_000) { bucket.started = now; bucket.count = 0; }
-    if (bucket.count >= 20 || activeAi >= 4) return res.status(429).json({ ok: false, error: '请求过于频繁，请稍后重试' });
+    if (bucket.count >= maxRequests || activeAi >= 4) {
+      const retryAfter=bucket.count>=maxRequests?Math.max(1,Math.ceil((bucket.started+600_000-now)/1000)):5;
+      res.setHeader('Retry-After',String(retryAfter));
+      return res.status(429).json({ok:false,error:'请求过于频繁，请稍后重试',retryAfter});
+    }
     bucket.count++;
     requests.set(key, bucket);
     activeAi++;
     try { res.json({ ok: true, ...(await handler(req.body || {})) }); }
-    catch (error) { res.status(400).json({ ok: false, error: publicErrorMessage(error) }); }
+    catch (error) { res.status(error?.statusCode===409?409:400).json({ ok: false, error: publicErrorMessage(error) }); }
     finally { activeAi--; }
   };
   app.post('/api/ai/models', withLimit(async ({ config }) => ({ models: await listModels(config) })));
   app.post('/api/ai/test', withLimit(async ({ config }) => await testConnection(config)));
-  app.post('/api/source/check', withLimit(async ({source,sourceName,legado,keyword}) => ({ evidence: await checkWebsite({source,sourceName,legado,keyword}) })));
+  app.post('/api/source/check', withLimit(async ({source,sourceName,legado,keyword}) => {const evidence=await checkWebsite({source,sourceName,legado,keyword});return {evidence,summary:summarizeEvidence(evidence)};}));
+  app.post('/api/source/catalog-check', withLimit(body=>catalog.check(body),{maxRequests:30,group:'catalog'}));
   app.post('/api/source/domains', withLimit(async ({sources}) => await inspectDomains({sources})));
   app.post('/api/source/auto-repair', withLimit(async ({source,sourceName,legado,keyword}) => await autoRepair({source,sourceName,legado,keyword})));
   app.post('/api/ai/repair', withLimit(async ({ config, source, sourceName, problem, legado, keyword }) => await suggestRepair(config, { source, sourceName, problem, legado, keyword })));

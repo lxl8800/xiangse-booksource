@@ -16,6 +16,7 @@ async function setup(t){
   w.TextEncoder=TextEncoder;w.TextDecoder=TextDecoder;
   w.HTMLElement.prototype.scrollIntoView=()=>{};
   w.fetch=async(url,options)=>{
+   if(String(url)==='/api/source/catalog')return {ok:true,json:async()=>({ok:true,catalogVersion:'test',items:[],count:0})};
    if(String(url).includes('updates.json'))return {ok:true,json:async()=>JSON.parse(fs.readFileSync('docs/updates.json','utf8'))};
    return new Promise(resolve=>pending.push({url:String(url),options,body:options.body?JSON.parse(options.body):null,resolve}));
   };
