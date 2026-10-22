@@ -6,7 +6,7 @@ import {redactText} from './evidence-report.js';
  */
 export const CHECK_STATES=Object.freeze({
  verified:'样本规则通过',partial:'部分验证',rules:'规则需修复',no_results:'搜索无结果',
- unreachable:'网络不可达',restricted:'访问受限',unsupported:'检测能力受限',error:'检测异常'
+ unreachable:'网络不可达',http_error:'接口 HTTP 错误',restricted:'访问受限',unsupported:'检测能力受限',error:'检测异常'
 });
 const REQUIRED=['search','detail','chapterList','chapterContent'];
 const narrow=x=>redactText(String(x??'')).slice(0,400);
@@ -16,6 +16,7 @@ const suggestions={
  partial:'展开证据检查 JS、编码及分页限制；未验证的部分不能标记为已修复。',
  rules:'有响应但现有字段提取或请求配置存在问题；可在单源检测中生成候选并独立复测。',
  no_results:'先尝试站点确实收录的小说名；搜索无结果不证明整个站点失效，也不要据此盲改 XPath。',
+ http_error:'服务器有响应但接口返回错误状态；404 应核查路径，5xx 可能是源站故障，不能仅凭状态码自动改写规则。',
  unreachable:'保留原规则，检查 DNS、证书、站点状态或稍后重试；网络失败不能靠猜 XPath 修复。',
  restricted:'站点拒绝访问或存在验证/认证限制；不绕过限制，不自动替换源。',
  unsupported:'存在动态 JS、WebView、POST、跨站或安全限制；保留规则和诊断，使用允许的环境或目标 App 验证。',
@@ -36,7 +37,8 @@ export function summarizeEvidence(evidence){
  if(failed){
    const status=failed.status;
    if(['blocked','forbidden','rate-limited'].includes(status)||[401,403,429].includes(failed.httpStatus))state='restricted';
-   else if(['timeout','network-error','dns-error','tls-error','http-error'].includes(status))state='unreachable';
+   else if(status==='http-error')state='http_error';
+   else if(['timeout','network-error','dns-error','tls-error'].includes(status))state='unreachable';
    else if(['unsupported','redirect'].includes(status))state='unsupported';
    else if(status==='no-results')state=failed.step==='search'&&!(Number(failed.count)>0||Number(failed.configuredMatches)>0)?'no_results':'rules';
    else state='error';

@@ -3,7 +3,7 @@
 (function(){
  'use strict';
  var $=function(id){return document.getElementById(id);};
- var labels={queued:'待检测',running:'检测中',cancelled:'已取消',verified:'样本规则通过',partial:'部分验证',rules:'规则需修复',no_results:'搜索无结果',unreachable:'网络不可达',restricted:'访问受限',unsupported:'检测能力受限',error:'检测异常'};
+ var labels={queued:'待检测',running:'检测中',cancelled:'已取消',verified:'样本规则通过',partial:'部分验证',rules:'规则需修复',no_results:'搜索无结果',unreachable:'网络不可达',http_error:'接口 HTTP 错误',restricted:'访问受限',unsupported:'检测能力受限',error:'检测异常'};
  var stageNames={search:'搜索',detail:'详情',chapterList:'目录',chapterContent:'正文'};
  var stageStates={ok:'HTTP/解析取得结果',skipped:'未继续',unsupported:'无法验证','not-tested':'未测试','no-results':'未匹配',timeout:'超时','network-error':'网络错误','http-error':'HTTP 错误',blocked:'受限',redirect:'跳转待确认'};
  var catalog=null,rows=[],generation=0,running=false,loading=false,controllers=new Map(),loadController=null;

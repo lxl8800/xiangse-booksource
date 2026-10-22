@@ -26,7 +26,7 @@ test('a nonempty search list with broken detail links is a rule error, not an em
  const e=chain();e.steps[0]={step:'search',status:'no-results',count:3,reason:'找到列表但没有有效详情链接'};assert.equal(summarizeEvidence(e).state,'rules');
 });
 test('timeouts, HTTP denial and unsupported runtime have distinct diagnosis',()=>{
- for(const [status,http,expected] of [['timeout',null,'unreachable'],['network-error',null,'unreachable'],['http-error',404,'unreachable'],['http-error',403,'restricted'],['http-error',429,'restricted'],['unsupported',null,'unsupported']]){
+ for(const [status,http,expected] of [['timeout',null,'unreachable'],['network-error',null,'unreachable'],['http-error',404,'http_error'],['http-error',523,'http_error'],['http-error',403,'restricted'],['http-error',429,'restricted'],['unsupported',null,'unsupported']]){
    const e=chain();e.steps[0]={step:'search',status,httpStatus:http,reason:'test'};const s=summarizeEvidence(e);assert.equal(s.state,expected);assert.equal(s.failureStage,'search');
  }
 });
